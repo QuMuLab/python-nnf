@@ -12,10 +12,15 @@ Model = t.Dict[Name, bool]
 #   - Make Internal inherit directly from frozenset?
 #   - Stop using dataclasses?
 #   - Compatibility with earlier Python versions?
-#   - __slots__
+#   - __slots__ (blocked by dataclass default values)
 
 
-def all_models(names: t.Iterable[Name]) -> t.Iterator[Model]:
+def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
+    """Yield dictionaries with all possible boolean values for the names.
+
+    >>> list(all_models(["a", "b"]))
+    [{'a': True, 'b': True}, {'a': False, 'b': True}, ...
+    """
     if not names:
         yield {}
     else:
@@ -42,7 +47,7 @@ class NNF:
         raise NotImplementedError
 
     def flat(self) -> bool:
-        return self.size() <= 2
+        return self.height() <= 2
 
     def simply_disjunct(self) -> bool:
         return all(node.is_simple()
@@ -136,7 +141,11 @@ class Var(Leaf):
     true: bool = True
 
     def __repr__(self) -> str:
-        return f"{self.name}" if self.true else f"~{self.name}"
+        if isinstance(self.name, str):
+            return f"{self.name}" if self.true else f"~{self.name}"
+        else:
+            base = f"{self.__class__.__name__}({self.name!r})"
+            return base if self.true else f"~{base}"
 
     def __invert__(self) -> Leaf:
         return Var(self.name, not self.true)
