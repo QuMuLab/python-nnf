@@ -39,17 +39,43 @@ def eval(
     raise TypeError(type(node))
 
 
+def _prob_label(probs: t.Dict[Name, float]) -> t.Callable[[Var], float]:
+    def label(leaf: Var) -> float:
+        if leaf.true:
+            return probs[leaf.name]
+        else:
+            return 1.0 - probs[leaf.name]
+
+    return label
+
+
 def SAT(node: NNF) -> bool:
     return eval(node, operator.or_, operator.and_, False, True,
                 lambda leaf: True)
 
 
 def NUM_SAT(node: NNF) -> int:
+    # General ×
     # Non-idempotent +
     # Non-neutral +
-    # General ×
     # = sd-DNNF
     return eval(node, operator.add, operator.mul, 0, 1, lambda leaf: 1)
+
+
+def WMC(node: NNF, weights: t.Callable[[Var], float]) -> float:
+    # General ×
+    # Non-idempotent +
+    # Non-neutral +
+    # = sd-DNNF
+    return eval(node, operator.add, operator.mul, 0.0, 1.0, weights)
+
+
+def PROB(node: NNF, probs: t.Dict[Name, float]) -> float:
+    # General ×
+    # Non-idempotent +
+    # Neutral +
+    # = d-DNNF
+    return eval(node, operator.add, operator.mul, 0.0, 1.0, _prob_label(probs))
 
 
 GradProb = t.Tuple[float, float]
@@ -84,3 +110,11 @@ def GRAD(
                 return 1 - probs[var.name], 0
 
     return eval(node, add, mul, (0.0, 0.0), (1.0, 0.0), label)
+
+
+def MPE(node: NNF, probs: t.Dict[Name, float]) -> float:
+    # General ×
+    # Non-neutral +
+    # Idempotent +
+    # = s-DNNF
+    return eval(node, max, operator.mul, 0.0, 1.0, _prob_label(probs))
