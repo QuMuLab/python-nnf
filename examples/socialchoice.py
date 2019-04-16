@@ -4,6 +4,7 @@ import functools
 import itertools
 
 from nnf import And, Or, Var, true, false
+from nnf import amc
 
 memoize = functools.lru_cache(None)  # huge speedup
 
@@ -70,3 +71,17 @@ assert s_3.simplify() == false
 # strings as candidates
 named = lin({"Alice", "Bob", "Carol"})
 assert len(list(named.models())) == 6
+
+# AMC
+assert s.decomposable()
+assert s.deterministic()
+assert s.smooth()
+
+assert amc.NUM_SAT(s) == 24
+assert amc.SAT(s)
+
+assert amc.SAT(s_2)
+assert amc.NUM_SAT(s_2) == 3
+
+assert not amc.SAT(s_3)
+assert amc.NUM_SAT(s_3) == 0
