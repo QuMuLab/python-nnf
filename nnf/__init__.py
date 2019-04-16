@@ -31,38 +31,53 @@ def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
 
 
 class NNF:
+    """Base class for all NNF sentences."""
+
     def __and__(self, other: NNF) -> NNF:
+        """And({self, other})"""
         return And({self, other})
 
     def __or__(self, other: NNF) -> NNF:
+        """Or({self, other})"""
         return Or({self, other})
 
     def walk(self) -> t.Iterator[NNF]:
+        """Yield all nodes in the sentence, depth-first."""
         yield self
 
     def size(self) -> int:
+        """The number of edges in the sentence."""
         raise NotImplementedError
 
     def height(self) -> int:
+        """The number of edges between here and the furthest leaf."""
         raise NotImplementedError
 
     def flat(self) -> bool:
+        """A sentence is flat if its height is at most 2.
+
+        That is, there are at most two layers below the root node.
+        """
         return self.height() <= 2
 
     def simply_disjunct(self) -> bool:
+        """The children of Or nodes are leaves that don't share variables."""
         return all(node.is_simple()
                    for node in self.walk()
                    if isinstance(node, Or))
 
     def simply_conjunct(self) -> bool:
+        """The children of And nodes are leaves that don't share variables."""
         return all(node.is_simple()
                    for node in self.walk()
                    if isinstance(node, And))
 
     def vars(self) -> t.FrozenSet[Name]:
+        """The names of all variables that appear in the sentence."""
         return frozenset()
 
     def decomposable(self) -> bool:
+        """The children of each And node don't share variables, recursively."""
         for node in self.walk():
             if isinstance(node, And):
                 seen: t.Set[Name] = set()
@@ -74,6 +89,10 @@ class NNF:
         return True
 
     def deterministic(self) -> bool:
+        """The children of each Or node contradict each other.
+
+        Warning: expensive!
+        """
         for node in self.walk():
             if isinstance(node, Or):
                 for a, b in itertools.combinations(node.children, 2):
@@ -82,6 +101,7 @@ class NNF:
         return True
 
     def smooth(self) -> bool:
+        """The children of each Or node all use the same variables."""
         for node in self.walk():
             if isinstance(node, Or):
                 expected = None
@@ -94,40 +114,56 @@ class NNF:
         return True
 
     def decision_node(self) -> bool:
+        """The sentence is a valid binary decision diagram (BDD)."""
         return False
 
     def satisfied_by(self, model: Model) -> bool:
+        """The given dictionary of values makes the sentence correct."""
         raise NotImplementedError
 
     def satisfiable(self) -> bool:
+        """Some set of values exists that makes the sentence correct."""
         return any(self.satisfied_by(model)
                    for model in all_models(self.vars()))
 
     def models(self) -> t.Iterator[Model]:
+        """Yield all dictionaries of values that make the sentence correct."""
         for model in all_models(self.vars()):
             if self.satisfied_by(model):
                 yield model
 
     def contradicts(self, other: NNF) -> bool:
+        """There is no set of values that satisfies both sentences."""
         for model in self.models():
             if other.satisfied_by(model):
                 return False
         return True
 
     def to_MODS(self) -> NNF:
+        """Convert the sentence to a MODS sentence."""
         return Or(And(Var(name, val)
                       for name, val in model.items())
                   for model in self.models())
 
     def instantiate(self, model: Model) -> NNF:
+        """Fill in all the values in the dictionary."""
         return self
 
     def simplify(self) -> NNF:
+        """Apply the following transformations to make the sentence simpler:
+
+        - If an And node has `false` as a child, replace it by `false`
+        - If an Or node has `true` as a child, replace it by `true`
+        - Remove children of And nodes that are `true`
+        - Remove children of Or nodes that are `false`
+        - If an And or Or node only has one child, replace it by that child
+        """
         # TODO: which properties does this preserve?
         return self
 
 
 class Leaf(NNF):
+    """Base class for all leaves, i.e. node types that can't have children."""
     def size(self) -> int:
         return 0
 
@@ -137,6 +173,25 @@ class Leaf(NNF):
 
 @dataclass(frozen=True)
 class Var(Leaf):
+    """A variable, or its negation.
+
+    If its name is a string, its repr will use that name directly.
+    Otherwise it will use more ordinary constructor syntax.
+
+    >>> a = Var('a')
+    >>> a
+    a
+    >>> ~a
+    ~a
+    >>> b = Var('b')
+    >>> a | ~b == Or({Var('a', True), Var('b', False)})
+    True
+    >>> Var(10)
+    Var(10)
+    >>> Var(('a', 'b'), False)
+    ~Var(('a', 'b'))
+    """
+
     name: Name
     true: bool = True
 
@@ -168,6 +223,10 @@ class Var(Leaf):
 
 @dataclass(frozen=True)
 class Bool(Leaf):
+    """A boolean leaf node.
+
+    `true` and `false` are pre-made instances. Typically you would use those.
+    """
     true: bool
 
     def __repr__(self) -> str:
@@ -189,6 +248,8 @@ false = Bool(False)
 
 @dataclass(frozen=True, init=False)
 class Internal(NNF):
+    """Base class for internal nodes, i.e. And and Or nodes."""
+
     # add __len__, __iter__ etc for .children?
     children: t.FrozenSet[NNF]
 
@@ -220,6 +281,7 @@ class Internal(NNF):
             return 0
 
     def is_simple(self) -> bool:
+        """Whether all children are leaves that don't share variables."""
         variables: t.Set[Name] = set()
         for child in self.children:
             if not isinstance(child, Leaf):
@@ -241,20 +303,26 @@ class Internal(NNF):
 
 
 class And(Internal):
+    """Conjunction nodes, which are only true if all of their children are."""
     def satisfied_by(self, model: Model) -> bool:
         return all(child.satisfied_by(model)
                    for child in self.children)
 
     def simplify(self) -> NNF:
+        if false in self.children:
+            return false
         new = {child.simplify() for child in self.children} - {true}
         if not new:
             return true
         if false in new:
             return false
+        if len(new) == 1:
+            return list(new)[0]
         return self.__class__(new)
 
 
 class Or(Internal):
+    """Disjunction nodes, which are true if any of their children are."""
     def satisfied_by(self, model: Model) -> bool:
         return any(child.satisfied_by(model)
                    for child in self.children)
@@ -302,13 +370,18 @@ class Or(Internal):
         return True
 
     def simplify(self) -> NNF:
+        if true in self.children:
+            return true
         new = {child.simplify() for child in self.children} - {false}
         if not new:
             return false
         if true in new:
             return true
+        if len(new) == 1:
+            return list(new)[0]
         return self.__class__(new)
 
 
 def decision(var: Var, if_true: NNF, if_false: NNF) -> Or:
+    """Create a decision node with a variable and two branches."""
     return Or({And({var, if_true}), And({~var, if_false})})

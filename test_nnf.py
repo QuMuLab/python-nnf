@@ -143,3 +143,9 @@ def test_DNNF_sat_strategies(sentence: nnf.NNF):
         assert not amc.SAT(sentence)
         assert amc.NUM_SAT(sentence) == 0
         event("Sentence not satisfiable")
+
+
+@given(NNF())
+def test_idempotent_simplification(sentence: nnf.NNF):
+    sentence = sentence.simplify()
+    assert sentence.simplify() == sentence

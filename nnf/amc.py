@@ -16,6 +16,7 @@ def eval(
         mul_neut: T,
         labeling: t.Callable[[Var], T],
 ) -> T:
+    """Execute an AMC technique, given a semiring and a labeling function."""
     if node == true:
         return mul_neut
     if node == false:
@@ -40,6 +41,7 @@ def eval(
 
 
 def _prob_label(probs: t.Dict[Name, float]) -> t.Callable[[Var], float]:
+    """Generate a labeling function for probabilities from a dictionary."""
     def label(leaf: Var) -> float:
         if leaf.true:
             return probs[leaf.name]
@@ -50,11 +52,13 @@ def _prob_label(probs: t.Dict[Name, float]) -> t.Callable[[Var], float]:
 
 
 def SAT(node: NNF) -> bool:
+    """Determine whether a DNNF sentence is satisfiable."""
     return eval(node, operator.or_, operator.and_, False, True,
                 lambda leaf: True)
 
 
 def NUM_SAT(node: NNF) -> int:
+    """Determine the number of models that satisfy a sd-DNNF sentence."""
     # General ×
     # Non-idempotent +
     # Non-neutral +
