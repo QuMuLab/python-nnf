@@ -5,11 +5,10 @@ import typing as t
 
 from dataclasses import dataclass
 
-Name = t.Union[str, int]
+Name = t.Hashable
 Model = t.Dict[Name, bool]
 
 # TODO:
-#   - NNF.simplify/NNF.instantiate
 #   - Make Internal inherit directly from frozenset?
 #   - Stop using dataclasses?
 #   - Compatibility with earlier Python versions?
@@ -115,6 +114,13 @@ class NNF:
                       for name, val in model.items())
                   for model in self.models())
 
+    def instantiate(self, model: Model) -> NNF:
+        return self
+
+    def simplify(self) -> NNF:
+        # TODO: which properties does this preserve?
+        return self
+
 
 class Leaf(NNF):
     def size(self) -> int:
@@ -140,6 +146,15 @@ class Var(Leaf):
 
     def satisfied_by(self, model: Model) -> bool:
         return model[self.name] if self.true else not model[self.name]
+
+    def instantiate(self, model: Model) -> Leaf:
+        if self.name in model:
+            if self.true == model[self.name]:
+                return true
+            else:
+                return false
+        else:
+            return self
 
 
 @dataclass(frozen=True)
@@ -211,11 +226,23 @@ class Internal(NNF):
                          for child in self.children
                          for name in child.vars())
 
+    def instantiate(self, model: Model) -> NNF:
+        return self.__class__(child.instantiate(model)
+                              for child in self.children)
+
 
 class And(Internal):
     def satisfied_by(self, model: Model) -> bool:
         return all(child.satisfied_by(model)
                    for child in self.children)
+
+    def simplify(self) -> NNF:
+        new = {child.simplify() for child in self.children} - {true}
+        if not new:
+            return true
+        if false in new:
+            return false
+        return self.__class__(new)
 
 
 class Or(Internal):
@@ -264,6 +291,14 @@ class Or(Internal):
             return False
 
         return True
+
+    def simplify(self) -> NNF:
+        new = {child.simplify() for child in self.children} - {false}
+        if not new:
+            return false
+        if true in new:
+            return true
+        return self.__class__(new)
 
 
 def decision(var: Var, if_true: NNF, if_false: NNF) -> Or:
