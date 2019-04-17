@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/blyxxyz/python-nnf.svg?branch=master)](https://travis-ci.org/blyxxyz/python-nnf)
+
 `nnf` is a Python package for creating and manipulating logical sentences
 written in the
 [negation normal form](https://en.wikipedia.org/wiki/Negation_normal_form)
