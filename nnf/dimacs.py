@@ -8,7 +8,7 @@ import io
 import typing as t
 import warnings
 
-from nnf import NNF, Var, Bool, And, Or, Name, true, false
+from nnf import NNF, Var, And, Or, Name, true, false
 
 # TODO: cnf format
 
@@ -46,12 +46,7 @@ def dump(
     fp.write(f"p sat {num_vars}\n")
 
     def serialize(node: NNF) -> None:
-        if isinstance(node, Bool):
-            if node.true:
-                fp.write('*()')
-            else:
-                fp.write('+()')
-        elif isinstance(node, Var):
+        if isinstance(node, Var):
             if var_labels is not None:
                 name = var_labels[node.name]
             else:

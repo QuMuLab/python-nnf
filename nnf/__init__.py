@@ -48,11 +48,15 @@ class NNF:
 
     def size(self) -> int:
         """The number of edges in the sentence."""
-        raise NotImplementedError
+        return 0
 
     def height(self) -> int:
         """The number of edges between here and the furthest leaf."""
-        raise NotImplementedError
+        return 0
+
+    def leaf(self) -> bool:
+        """True if the node doesn't have children."""
+        return True
 
     def flat(self) -> bool:
         """A sentence is flat if its height is at most 2.
@@ -163,17 +167,8 @@ class NNF:
         return self
 
 
-class Leaf(NNF):
-    """Base class for all leaves, i.e. node types that can't have children."""
-    def size(self) -> int:
-        return 0
-
-    def height(self) -> int:
-        return 0
-
-
 @dataclass(frozen=True)
-class Var(Leaf):
+class Var(NNF):
     """A variable, or its negation.
 
     If its name is a string, its repr will use that name directly.
@@ -203,7 +198,7 @@ class Var(Leaf):
             base = f"{self.__class__.__name__}({self.name!r})"
             return base if self.true else f"~{base}"
 
-    def __invert__(self) -> Leaf:
+    def __invert__(self) -> Var:
         return Var(self.name, not self.true)
 
     def vars(self) -> t.FrozenSet[Name]:
@@ -220,27 +215,6 @@ class Var(Leaf):
                 return false
         else:
             return self
-
-
-@dataclass(frozen=True)
-class Bool(Leaf):
-    """A boolean leaf node.
-
-    `true` and `false` are pre-made instances. Typically you would use those.
-    """
-    true: bool
-
-    def __repr__(self) -> str:
-        return 'true' if self.true else 'false'
-
-    def __invert__(self) -> Bool:
-        return Bool(not self.true)
-
-    def satisfied_by(self, model: Model) -> bool:
-        return self.true
-
-    def decision_node(self) -> bool:
-        return True
 
 
 @dataclass(frozen=True, init=False)
@@ -274,14 +248,18 @@ class Internal(NNF):
         if self.children:
             return 1 + max(child.height()
                            for child in self.children)
-        else:
-            return 0
+        return 0
+
+    def leaf(self) -> bool:
+        if self.children:
+            return False
+        return True
 
     def is_simple(self) -> bool:
         """Whether all children are leaves that don't share variables."""
         variables: t.Set[Name] = set()
         for child in self.children:
-            if not isinstance(child, Leaf):
+            if not child.leaf():
                 return False
             if isinstance(child, Var):
                 if child.name in variables:
@@ -317,6 +295,16 @@ class And(Internal):
             return list(new)[0]
         return self.__class__(new)
 
+    def decision_node(self) -> bool:
+        if not self.children:
+            return True
+        return False
+
+    def __repr__(self) -> str:
+        if not self.children:
+            return 'true'
+        return super().__repr__()
+
 
 class Or(Internal):
     """Disjunction nodes, which are true if any of their children are."""
@@ -325,6 +313,8 @@ class Or(Internal):
                    for child in self.children)
 
     def decision_node(self) -> bool:
+        if not self.children:
+            return True  # boolean
         if len(self.children) != 2:
             return False
         child1, child2 = self.children
@@ -378,13 +368,16 @@ class Or(Internal):
             return list(new)[0]
         return self.__class__(new)
 
+    def __repr__(self) -> str:
+        if not self.children:
+            return 'false'
+        return super().__repr__()
+
 
 def decision(var: Var, if_true: NNF, if_false: NNF) -> Or:
     """Create a decision node with a variable and two branches."""
     return Or({And({var, if_true}), And({~var, if_false})})
 
 
-# true = Bool(True)
-# false = Bool(False)
 true = And()
 false = Or()
