@@ -13,6 +13,7 @@ Model = t.Dict[Name, bool]
 #   - Stop using dataclasses?
 #   - Compatibility with earlier Python versions?
 #   - __slots__ (blocked by dataclass default values)
+#   - A way to deduplicate objects in sentences
 
 
 def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
@@ -211,7 +212,7 @@ class Var(Leaf):
     def satisfied_by(self, model: Model) -> bool:
         return model[self.name] if self.true else not model[self.name]
 
-    def instantiate(self, model: Model) -> Leaf:
+    def instantiate(self, model: Model) -> NNF:
         if self.name in model:
             if self.true == model[self.name]:
                 return true
@@ -240,10 +241,6 @@ class Bool(Leaf):
 
     def decision_node(self) -> bool:
         return True
-
-
-true = Bool(True)
-false = Bool(False)
 
 
 @dataclass(frozen=True, init=False)
@@ -385,3 +382,9 @@ class Or(Internal):
 def decision(var: Var, if_true: NNF, if_false: NNF) -> Or:
     """Create a decision node with a variable and two branches."""
     return Or({And({var, if_true}), And({~var, if_false})})
+
+
+# true = Bool(True)
+# false = Bool(False)
+true = And()
+false = Or()

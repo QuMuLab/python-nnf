@@ -1,6 +1,6 @@
 import nnf
 
-from nnf import Var, And, Or, amc
+from nnf import Var, And, Or, amc, dimacs
 
 from hypothesis import assume, event, given, strategies as st
 
@@ -149,3 +149,34 @@ def test_DNNF_sat_strategies(sentence: nnf.NNF):
 def test_idempotent_simplification(sentence: nnf.NNF):
     sentence = sentence.simplify()
     assert sentence.simplify() == sentence
+
+
+@given(NNF())
+def test_simplify_preserves_meaning(sentence: nnf.NNF):
+    simple = sentence.simplify()
+    for model in sentence.models():
+        assert simple.satisfied_by(model)
+    for model in simple.models():
+        assert sentence.instantiate(model).simplify() == nnf.true
+
+
+def test_dimacs_serialize():
+    # http://www.domagoj-babic.com/uploads/ResearchProjects/Spear/dimacs-cnf.pdf
+    sample_input = """c Sample SAT format
+c
+p sat 4
+(*(+(1 3 -4)
+   +(4)
+   +(2 3)))"""
+    assert dimacs.loads(sample_input) == And({
+        Or({Var(1), Var(3), ~Var(4)}),
+        Or({Var(4)}),
+        Or({Var(2), Var(3)})
+    })
+
+
+@given(NNF())
+def test_arbitrary_dimacs_serialize(sentence: nnf.NNF):
+    # sentence = sentence.simplify()
+    # event(nnf.dimacs.dumps(sentence))
+    assert dimacs.loads(dimacs.dumps(sentence)) == sentence
