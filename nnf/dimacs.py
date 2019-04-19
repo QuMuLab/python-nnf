@@ -131,7 +131,9 @@ def _load_sat(fp: t.TextIO) -> NNF:
             continue
         tokens.extend(
             line.replace('(', '( ')
-                .replace(')', ' )')
+                .replace(')', ' ) ')
+                .replace('+(', ' +(')
+                .replace('*(', ' *(')
                 .replace('-', ' - ')
                 .split()
         )

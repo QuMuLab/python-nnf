@@ -1,8 +1,10 @@
+import pytest
+
+from hypothesis import assume, event, given, strategies as st
+
 import nnf
 
 from nnf import Var, And, Or, amc, dimacs
-
-from hypothesis import assume, event, given, strategies as st
 
 a, b, c = Var('a'), Var('b'), Var('c')
 
@@ -167,7 +169,8 @@ c
 p sat 4
 (*(+(1 3 -4)
    +(4)
-   +(2 3)))"""
+   +(2 3)))
+"""
     assert dimacs.loads(sample_input) == And({
         Or({Var(1), Var(3), ~Var(4)}),
         Or({Var(4)}),
@@ -175,8 +178,22 @@ p sat 4
     })
 
 
+@pytest.mark.parametrize(
+    'serialized, sentence',
+    [
+        ('p sat 2\n(+((1)+((2))))', Or({Var(1), Or({Var(2)})}))
+    ]
+)
+def test_dimacs_weird_input(serialized: str, sentence: nnf.NNF):
+    assert dimacs.loads(serialized) == sentence
+
+
 @given(NNF())
 def test_arbitrary_dimacs_serialize(sentence: nnf.NNF):
     # sentence = sentence.simplify()
     # event(nnf.dimacs.dumps(sentence))
     assert dimacs.loads(dimacs.dumps(sentence)) == sentence
+    # Removing spaces may change the meaning, but shouldn't make it invalid
+    serial = dimacs.dumps(sentence).split('\n')
+    serial[1] = serial[1].replace(' ', '')
+    dimacs.loads('\n'.join(serial))
