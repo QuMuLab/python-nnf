@@ -50,38 +50,39 @@ def lin(candidates):
     return C(frozenset())
 
 
-s = lin(range(4))
+def test():
+    s = lin(range(4))
 
-assert len(list(s.models())) == 24
+    assert len(list(s.models())) == 24
 
-# unambiguous ordering
-s_1 = s.instantiate({(0, 1): True, (1, 2): True, (2, 3): True})
-assert list(s_1.models()) == [{(0, 2): True, (0, 3): True, (1, 3): True}]
+    # unambiguous ordering
+    s_1 = s.instantiate({(0, 1): True, (1, 2): True, (2, 3): True})
+    assert list(s_1.models()) == [{(0, 2): True, (0, 3): True, (1, 3): True}]
 
-# ambiguous ordering
-s_2 = s.instantiate({(0, 1): True, (1, 2): True, (2, 3): False})
-assert len(list(s_2.models())) == 3
+    # ambiguous ordering
+    s_2 = s.instantiate({(0, 1): True, (1, 2): True, (2, 3): False})
+    assert len(list(s_2.models())) == 3
 
-# circular ordering
-s_3 = s.instantiate({(0, 1): True, (1, 2): True, (0, 2): False})
-assert len(list(s_3.models())) == 0
-assert not s_3.satisfiable()
-assert s_3.simplify() == false
+    # circular ordering
+    s_3 = s.instantiate({(0, 1): True, (1, 2): True, (0, 2): False})
+    assert len(list(s_3.models())) == 0
+    assert not s_3.satisfiable()
+    assert s_3.simplify() == false
 
-# strings as candidates
-named = lin({"Alice", "Bob", "Carol"})
-assert len(list(named.models())) == 6
+    # strings as candidates
+    named = lin({"Alice", "Bob", "Carol"})
+    assert len(list(named.models())) == 6
 
-# AMC
-assert s.decomposable()
-assert s.deterministic()
-assert s.smooth()
+    # AMC
+    assert s.decomposable()
+    assert s.deterministic()
+    assert s.smooth()
 
-assert amc.NUM_SAT(s) == 24
-assert amc.SAT(s)
+    assert amc.NUM_SAT(s) == 24
+    assert amc.SAT(s)
 
-assert amc.SAT(s_2)
-assert amc.NUM_SAT(s_2) == 3
+    assert amc.SAT(s_2)
+    assert amc.NUM_SAT(s_2) == 3
 
-assert not amc.SAT(s_3)
-assert amc.NUM_SAT(s_3) == 0
+    assert not amc.SAT(s_3)
+    assert amc.NUM_SAT(s_3) == 0
