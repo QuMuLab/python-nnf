@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from hypothesis import assume, event, given, strategies as st
@@ -229,6 +231,7 @@ def test_arbitrary_dimacs_sat_serialize(sentence: nnf.NNF):
 
 @given(CNF())
 def test_arbitrary_dimacs_cnf_serialize(sentence: nnf.And):
+    assume(all(len(clause.children) > 0 for clause in sentence.children))
     assert dimacs.loads(dimacs.dumps(sentence, mode='cnf')) == sentence
 
 
@@ -238,6 +241,7 @@ def test_dimacs_cnf_serialize_accepts_only_cnf(sentence: nnf.NNF):
             and all(isinstance(clause, Or)
                     and all(isinstance(var, Var)
                             for var in clause.children)
+                    and len(clause.children) > 0
                     for clause in sentence.children)):
         event("CNF sentence")
         dimacs.dumps(sentence, mode='cnf')
@@ -245,3 +249,17 @@ def test_dimacs_cnf_serialize_accepts_only_cnf(sentence: nnf.NNF):
         event("Not CNF sentence")
         with pytest.raises(TypeError):
             dimacs.dumps(sentence, mode='cnf')
+
+
+@pytest.mark.parametrize(
+    'fname, clauses',
+    [
+        ('bf0432-007.cnf', 3667),
+        ('sw100-1.cnf', 3100),
+        ('uuf250-01.cnf', 1065),
+    ]
+)
+def test_cnf_benchmark_data(fname: str, clauses: int):
+    with open(os.path.dirname(__file__) + '/testdata/satlib/' + fname) as f:
+        sentence = dimacs.load(f)
+    assert isinstance(sentence, And) and len(sentence.children) == clauses
