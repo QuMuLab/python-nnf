@@ -78,8 +78,21 @@ def terms(draw):
 
 
 @st.composite
+def clauses(draw):
+    return Or(Var(name, draw(st.booleans()))
+              for name in draw(st.sets(names)))
+
+
+@st.composite
 def DNF(draw):
     return Or(draw(st.sets(terms())))
+
+
+@st.composite
+def CNF(draw):
+    sentence = And(draw(st.sets(clauses())))
+    assume(len(sentence.children) > 0)
+    return sentence
 
 
 @st.composite
@@ -162,7 +175,7 @@ def test_simplify_preserves_meaning(sentence: nnf.NNF):
         assert sentence.instantiate(model).simplify() == nnf.true
 
 
-def test_dimacs_serialize():
+def test_dimacs_sat_serialize():
     # http://www.domagoj-babic.com/uploads/ResearchProjects/Spear/dimacs-cnf.pdf
     sample_input = """c Sample SAT format
 c
@@ -184,16 +197,51 @@ p sat 4
         ('p sat 2\n(+((1)+((2))))', Or({Var(1), Or({Var(2)})}))
     ]
 )
-def test_dimacs_weird_input(serialized: str, sentence: nnf.NNF):
+def test_dimacs_sat_weird_input(serialized: str, sentence: nnf.NNF):
     assert dimacs.loads(serialized) == sentence
 
 
+def test_dimacs_cnf_serialize():
+    sample_input = """c Example CNF format file
+c
+p cnf 4 3
+1 3 -4 0
+4 0 2
+-3
+"""
+    assert dimacs.loads(sample_input) == And({
+        Or({Var(1), Var(3), ~Var(4)}),
+        Or({Var(4)}),
+        Or({Var(2), ~Var(3)})
+    })
+
+
 @given(NNF())
-def test_arbitrary_dimacs_serialize(sentence: nnf.NNF):
-    # sentence = sentence.simplify()
-    # event(nnf.dimacs.dumps(sentence))
+def test_arbitrary_dimacs_sat_serialize(sentence: nnf.NNF):
     assert dimacs.loads(dimacs.dumps(sentence)) == sentence
     # Removing spaces may change the meaning, but shouldn't make it invalid
+    # At least as far as our parser is concerned, a more sophisticated one
+    # could detect variables with too high names
     serial = dimacs.dumps(sentence).split('\n')
     serial[1] = serial[1].replace(' ', '')
     dimacs.loads('\n'.join(serial))
+
+
+@given(CNF())
+def test_arbitrary_dimacs_cnf_serialize(sentence: nnf.And):
+    assert dimacs.loads(dimacs.dumps(sentence, mode='cnf')) == sentence
+
+
+@given(NNF())
+def test_dimacs_cnf_serialize_accepts_only_cnf(sentence: nnf.NNF):
+    if (isinstance(sentence, And)
+            and all(isinstance(clause, Or)
+                    and all(isinstance(var, Var)
+                            for var in clause.children)
+                    for clause in sentence.children)):
+        event("CNF sentence")
+        dimacs.dumps(sentence, mode='cnf')
+    else:
+        event("Not CNF sentence")
+        with pytest.raises(TypeError):
+            dimacs.dumps(sentence, mode='cnf')

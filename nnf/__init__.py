@@ -28,6 +28,7 @@ Model = t.Dict[Name, bool]
 #   - Compatibility with earlier Python versions?
 #   - __slots__ (blocked by dataclass default values)
 #   - A way to deduplicate objects in sentences
+#   - Generic types for NNF and Internal?
 
 
 def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
