@@ -263,3 +263,10 @@ def test_cnf_benchmark_data(fname: str, clauses: int):
     with open(os.path.dirname(__file__) + '/testdata/satlib/' + fname) as f:
         sentence = dimacs.load(f)
     assert isinstance(sentence, And) and len(sentence.children) == clauses
+
+
+@given(NNF())
+def test_walk_unique_nodes(sentence: nnf.NNF):
+    result = list(sentence.walk())
+    assert len(result) == len(set(result))
+    assert len(result) <= sentence.size() + 1

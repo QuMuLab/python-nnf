@@ -59,8 +59,21 @@ class NNF:
         return Or({self, other})
 
     def walk(self) -> t.Iterator[NNF]:
-        """Yield all nodes in the sentence, depth-first."""
-        yield self
+        """Yield all nodes in the sentence, depth-first.
+
+        Nodes that appear multiple times are yielded only once.
+        """
+        # Could be made width-first by using a deque and popping from the left
+        seen = {self}
+        nodes = [self]
+        while nodes:
+            node = nodes.pop()
+            yield node
+            if isinstance(node, Internal):
+                for child in node.children:
+                    if child not in seen:
+                        seen.add(child)
+                        nodes.append(child)
 
     def size(self) -> int:
         """The number of edges in the sentence."""
@@ -79,6 +92,8 @@ class NNF:
 
         That is, there are at most two layers below the root node.
         """
+        # Could be sped up by returning as soon as a path longer than 2 is
+        # found, instead of computing the full height
         return self.height() <= 2
 
     def simply_disjunct(self) -> bool:
@@ -188,6 +203,9 @@ class NNF:
         DOT is a graph visualization language.
         """
         # TODO: sort in some clever way for deterministic output
+        # TODO: offer more knobs
+        #       - add own directives
+        #       - set different palette
         counter = itertools.count()
         names: t.Dict[NNF, t.Tuple[int, str, str]] = {}
         arrows: t.Set[t.Tuple[int, int]] = set()
@@ -302,11 +320,6 @@ class Internal(NNF):
                     f"({{{', '.join(map(repr, self.children))}}})")
         else:
             return f"{self.__class__.__name__}()"
-
-    def walk(self) -> t.Iterator[NNF]:
-        yield self
-        for child in self.children:
-            yield from child.walk()
 
     def size(self) -> int:
         return sum(1 + child.size()
