@@ -30,6 +30,7 @@ Model = t.Dict[Name, bool]
 #   - __slots__ (blocked by dataclass default values)
 #   - A way to deduplicate objects in sentences
 #   - Generic types for NNF and Internal?
+#   - Builder object that does temporary memoization?
 
 
 def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
@@ -110,7 +111,9 @@ class NNF:
 
     def vars(self) -> t.FrozenSet[Name]:
         """The names of all variables that appear in the sentence."""
-        return frozenset()
+        return frozenset(node.name
+                         for node in self.walk()
+                         if isinstance(node, Var))
 
     def decomposable(self) -> bool:
         """The children of each And node don't share variables, recursively."""
@@ -287,9 +290,6 @@ class Var(NNF):
     def __invert__(self) -> Var:
         return Var(self.name, not self.true)
 
-    def vars(self) -> t.FrozenSet[Name]:
-        return frozenset({self.name})
-
     def satisfied_by(self, model: Model) -> bool:
         return model[self.name] if self.true else not model[self.name]
 
@@ -309,6 +309,8 @@ class Internal(NNF):
 
     # add __len__, __iter__ etc for .children?
     children: t.FrozenSet[NNF]
+
+    __slots__ = ()
 
     def __init__(self, children: t.Iterable[NNF] = ()) -> None:
         # needed because the dataclass is frozen
@@ -347,11 +349,6 @@ class Internal(NNF):
                     return False
                 variables.add(child.name)
         return True
-
-    def vars(self) -> t.FrozenSet[Name]:
-        return frozenset(name
-                         for child in self.children
-                         for name in child.vars())
 
     def instantiate(self, model: Model) -> NNF:
         return self.__class__(child.instantiate(model)
