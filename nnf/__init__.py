@@ -24,6 +24,7 @@ Model = t.Dict[Name, bool]
 
 # TODO:
 #   - Make Internal inherit directly from frozenset?
+#     - No, code becomes less readable and equality and operators go bad
 #   - Stop using dataclasses?
 #   - Compatibility with earlier Python versions?
 #   - __slots__ (blocked by dataclass default values)
@@ -180,6 +181,58 @@ class NNF:
         """
         # TODO: which properties does this preserve?
         return self
+
+    def to_DOT(self, color: bool = False) -> str:
+        """Output a representation of the sentence in the DOT language.
+
+        DOT is a graph visualization language.
+        """
+        # TODO: sort in some clever way for deterministic output
+        counter = itertools.count()
+        names: t.Dict[NNF, t.Tuple[int, str, str]] = {}
+        arrows: t.Set[t.Tuple[int, int]] = set()
+
+        def name(node: NNF) -> int:
+            if node not in names:
+                number = next(counter)
+                if isinstance(node, Var):
+                    label = str(node.name).replace('"', r'\"')
+                    color = 'chartreuse'
+                    if not node.true:
+                        label = '¬' + label
+                        color = 'pink'
+                    names[node] = (number, label, color)
+                elif node == true:
+                    names[node] = (number, "⊤", 'green')
+                elif node == false:
+                    names[node] = (number, "⊥", 'red')
+                elif isinstance(node, And):
+                    names[node] = (number, "∧", 'lightblue')
+                elif isinstance(node, Or):
+                    names[node] = (number, "∨", 'yellow')
+                else:
+                    raise TypeError(f"Can't handle node of type {type(node)}")
+            return names[node][0]
+
+        for node in self.walk():
+            name(node)
+            if isinstance(node, Internal):
+                for child in node.children:
+                    arrows.add((name(node), name(child)))
+
+        return '\n'.join([
+            'digraph {',
+            *(
+                f'    {number} [label="{label}"'
+                + (f' fillcolor="{fillcolor}" style=filled]' if color else ']')
+                for number, label, fillcolor in names.values()
+            ),
+            *(
+                f'    {src} -> {dst}'
+                for src, dst in arrows
+            ),
+            '}\n'
+        ])
 
 
 @dataclass(frozen=True)
