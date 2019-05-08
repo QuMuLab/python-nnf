@@ -19,6 +19,8 @@ import typing as t
 
 from dataclasses import dataclass
 
+import nnf
+
 Name = t.Hashable
 Model = t.Dict[Name, bool]
 
@@ -28,9 +30,8 @@ Model = t.Dict[Name, bool]
 #   - Stop using dataclasses?
 #   - Compatibility with earlier Python versions?
 #   - __slots__ (blocked by dataclass default values)
-#   - A way to deduplicate objects in sentences
 #   - Generic types for NNF and Internal?
-#   - Builder object that does temporary memoization?
+#   - isinstance(true, Internal) is currently true, look for weird effects
 
 
 def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
@@ -199,6 +200,46 @@ class NNF:
         """
         # TODO: which properties does this preserve?
         return self
+
+    def deduplicate(self) -> NNF:
+        """Return a copy of the sentence without any duplicate objects.
+
+        If a node has multiple parents, it's possible for it to be
+        represented by two separate objects. This method gets rid of that
+        duplication.
+
+        In a lot of cases it's better to avoid the duplication in the first
+        place, for example with a Builder object.
+        """
+        new_nodes: t.Dict[NNF, NNF] = {}
+
+        def recreate(node: NNF) -> NNF:
+            if node not in new_nodes:
+                if isinstance(node, Var):
+                    new_nodes[node] = node
+                elif isinstance(node, Or):
+                    new_nodes[node] = Or(recreate(child)
+                                         for child in node.children)
+                elif isinstance(node, And):
+                    new_nodes[node] = And(recreate(child)
+                                          for child in node.children)
+            return new_nodes[node]
+
+        return recreate(self)
+
+    def object_count(self) -> int:
+        """Return the number of distinct node objects in the sentence."""
+        ids: t.Set[int] = set()
+
+        def count(node: NNF) -> None:
+            ids.add(id(node))
+            if isinstance(node, Internal):
+                for child in node.children:
+                    if id(child) not in ids:
+                        count(child)
+
+        count(self)
+        return len(ids)
 
     def to_DOT(self, color: bool = False) -> str:
         """Output a representation of the sentence in the DOT language.
@@ -459,3 +500,35 @@ def decision(var: Var, if_true: NNF, if_false: NNF) -> Or:
 
 true = And()
 false = Or()
+
+
+class Builder:
+    """Automatically deduplicates NNF nodes as you make them.
+
+    Usage:
+
+    >>> builder = Builder()
+    >>> var = builder.Var('A')
+    >>> var2 = builder.Var('A')
+    >>> var is var2
+    True
+    """
+    # TODO: deduplicate vars that are negated using the operator
+    def __init__(self, seed: t.Iterable[NNF] = ()):
+        self.stored: t.Dict[NNF, NNF] = {true: true, false: false}
+        for node in seed:
+            self.stored[node] = node
+        self.true = true
+        self.false = false
+
+    def Var(self, name: Name, true: bool = True) -> nnf.Var:
+        ret = Var(name, true)
+        return self.stored.setdefault(ret, ret)  # type: ignore
+
+    def And(self, children: t.Iterable[NNF] = ()) -> nnf.And:
+        ret = And(children)
+        return self.stored.setdefault(ret, ret)  # type: ignore
+
+    def Or(self, children: t.Iterable[NNF] = ()) -> nnf.Or:
+        ret = Or(children)
+        return self.stored.setdefault(ret, ret)  # type: ignore
