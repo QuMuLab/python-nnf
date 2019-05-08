@@ -1,4 +1,5 @@
 import functools
+import math
 import operator
 
 import typing as t
@@ -122,3 +123,35 @@ def MPE(node: NNF, probs: t.Dict[Name, float]) -> float:
     # Idempotent +
     # = s-DNNF
     return eval(node, max, operator.mul, 0.0, 1.0, _prob_label(probs))
+
+
+def reduce(
+        node: NNF,
+        add_key: t.Callable[[T], t.Any],
+        mul: t.Callable[[T, T], T],
+        add_neut: T,
+        mul_neut: T,
+        labeling: t.Callable[[Var], T],
+) -> NNF:
+    def add(a: T, b: T) -> T:
+        return max((a, b), key=add_key)
+
+    if isinstance(node, Or):
+        if len(node.children) == 0:
+            return node
+        elif len(node.children) == 1:
+            return list(node.children)[0]
+        return max((reduce(child, add_key, mul, add_neut,
+                           mul_neut, labeling)
+                    for child in node.children),
+                   key=lambda child: add_key(eval(child, add, mul, add_neut,
+                                                  mul_neut, labeling)))
+    elif isinstance(node, And):
+        return And(reduce(child, add_key, mul, add_neut, mul_neut, labeling)
+                   for child in node.children)
+    else:
+        return node
+
+
+def maxplus_reduce(node: NNF, labeling: t.Callable[[Var], float]) -> NNF:
+    return reduce(node, lambda n: n, operator.add, -math.inf, 0, labeling)
