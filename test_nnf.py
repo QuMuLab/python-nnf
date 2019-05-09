@@ -177,6 +177,34 @@ def test_simplify_preserves_meaning(sentence: nnf.NNF):
         assert sentence.instantiate(model).simplify() == nnf.true
 
 
+@given(NNF())
+def test_simplify_eliminates_bools(sentence: nnf.NNF):
+    assume(sentence != nnf.true and sentence != nnf.false)
+    if any(node == nnf.true or node == nnf.false
+           for node in sentence.walk()):
+        event("Sentence contained booleans originally")
+    sentence = sentence.simplify()
+    if sentence == nnf.true or sentence == nnf.false:
+        event("Sentence simplified to boolean")
+    else:
+        for node in sentence.simplify().walk():
+            assert node != nnf.true and node != nnf.false
+
+
+@given(NNF())
+def test_simplify_merges_internal_nodes(sentence: nnf.NNF):
+    if any(any(type(node) == type(child)
+               for child in node.children)
+           for node in sentence.walk()
+           if isinstance(node, nnf.Internal)):
+        event("Sentence contained immediately mergeable nodes")
+        # Nodes may also be merged after intermediate nodes are removed
+    for node in sentence.simplify().walk():
+        if isinstance(node, nnf.Internal):
+            for child in node.children:
+                assert type(node) != type(child)
+
+
 def test_dimacs_sat_serialize():
     # http://www.domagoj-babic.com/uploads/ResearchProjects/Spear/dimacs-cnf.pdf
     sample_input = """c Sample SAT format

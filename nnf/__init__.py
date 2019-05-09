@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import functools
 import itertools
 import typing as t
 
@@ -24,6 +25,8 @@ import nnf
 Name = t.Hashable
 Model = t.Dict[Name, bool]
 
+memoize = functools.lru_cache(maxsize=None)
+
 # TODO:
 #   - Make Internal inherit directly from frozenset?
 #     - No, code becomes less readable and equality and operators go bad
@@ -32,6 +35,9 @@ Model = t.Dict[Name, bool]
 #   - __slots__ (blocked by dataclass default values)
 #   - Generic types for NNF and Internal?
 #   - isinstance(true, Internal) is currently true, look for weird effects
+#   - add __all__
+#   - try using memoize in more places
+#   - to_model(self) -> Model
 
 
 def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
@@ -197,9 +203,49 @@ class NNF:
         - Remove children of And nodes that are `true`
         - Remove children of Or nodes that are `false`
         - If an And or Or node only has one child, replace it by that child
+        - If an And or Or node has a child of the same type, merge them
         """
         # TODO: which properties does this preserve?
-        return self
+
+        @memoize
+        def simple(node: NNF) -> NNF:
+            if isinstance(node, Var):
+                return node
+            new_children: t.Set[NNF] = set()
+            if isinstance(node, Or):
+                for child in map(simple, node.children):
+                    if child == true:
+                        return true
+                    elif child == false:
+                        pass
+                    elif isinstance(child, Or):
+                        new_children.update(child.children)
+                    else:
+                        new_children.add(child)
+                if len(new_children) == 0:
+                    return false
+                elif len(new_children) == 1:
+                    return list(new_children)[0]
+                return Or(new_children)
+            elif isinstance(node, And):
+                for child in map(simple, node.children):
+                    if child == false:
+                        return false
+                    elif child == true:
+                        pass
+                    elif isinstance(child, And):
+                        new_children.update(child.children)
+                    else:
+                        new_children.add(child)
+                if len(new_children) == 0:
+                    return true
+                elif len(new_children) == 1:
+                    return list(new_children)[0]
+                return And(new_children)
+            else:
+                raise TypeError(node)
+
+        return simple(self)
 
     def deduplicate(self) -> NNF:
         """Return a copy of the sentence without any duplicate objects.
@@ -402,18 +448,6 @@ class And(Internal):
         return all(child.satisfied_by(model)
                    for child in self.children)
 
-    def simplify(self) -> NNF:
-        if false in self.children:
-            return false
-        new = {child.simplify() for child in self.children} - {true}
-        if not new:
-            return true
-        if false in new:
-            return false
-        if len(new) == 1:
-            return list(new)[0]
-        return self.__class__(new)
-
     def decision_node(self) -> bool:
         if not self.children:
             return True
@@ -474,18 +508,6 @@ class Or(Internal):
             return False
 
         return True
-
-    def simplify(self) -> NNF:
-        if true in self.children:
-            return true
-        new = {child.simplify() for child in self.children} - {false}
-        if not new:
-            return false
-        if true in new:
-            return true
-        if len(new) == 1:
-            return list(new)[0]
-        return self.__class__(new)
 
     def __repr__(self) -> str:
         if not self.children:
