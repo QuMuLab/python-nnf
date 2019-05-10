@@ -191,6 +191,22 @@ class NNF:
                       for name, val in model.items())
                   for model in self.models())
 
+    def to_model(self) -> Model:
+        """If the sentence directly represents a model, convert it to that."""
+        if not isinstance(self, And):
+            raise TypeError("A sentence can only be converted to a model if "
+                            "it's a conjunction of variables.")
+        model: Model = {}
+        for child in self.children:
+            if not isinstance(child, Var):
+                raise TypeError("A sentence can only be converted to a "
+                                "model if it's a conjunction of variables.")
+            if child.name in model:
+                raise ValueError(f"{child.name!r} appears multiple times.")
+            model[child.name] = child.true
+
+        return model
+
     def instantiate(self, model: Model) -> NNF:
         """Fill in all the values in the dictionary."""
         return self

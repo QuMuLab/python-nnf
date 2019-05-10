@@ -298,3 +298,9 @@ def test_walk_unique_nodes(sentence: nnf.NNF):
     result = list(sentence.walk())
     assert len(result) == len(set(result))
     assert len(result) <= sentence.size() + 1
+
+
+@given(st.dictionaries(st.integers(), st.booleans()))
+def test_to_model(model: dict):
+    sentence = nnf.And(nnf.Var(k, v) for k, v in model.items())
+    assert sentence.to_model() == model
