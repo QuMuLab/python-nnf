@@ -1,5 +1,6 @@
 """NNF example based on https://arxiv.org/pdf/1807.06397.pdf"""
 
+import collections
 import functools
 import itertools
 
@@ -53,6 +54,50 @@ def lin(candidates):
     return C(frozenset())
 
 
+def model_to_order(model):
+    @functools.cmp_to_key
+    def cmp(a, b):
+        if (a, b) in model:
+            return -1 if model[(a, b)] else 1
+        return 1 if model[(b, a)] else -1
+
+    return tuple(sorted({candidate
+                         for pair in model.keys()
+                         for candidate in pair}, key=cmp))
+
+
+def order_to_model(order):
+    model = {}
+    for i, candidate in enumerate(order):
+        for other in order[i + 1:]:
+            if candidate < other:
+                model[(candidate, other)] = True
+            else:
+                model[(other, candidate)] = False
+    return model
+
+
+def kemeny(votes):
+    labels = collections.Counter()
+    for vote in votes:
+        for name, true in order_to_model(vote).items():
+            labels[nnf.Var(name, true)] += 1
+    return {model_to_order(model)
+            for model in amc.maxplus_reduce(lin(votes[0]), labels).models()}
+
+
+def slater(votes):
+    totals = collections.Counter()
+    for vote in votes:
+        for name, true in order_to_model(vote).items():
+            totals[nnf.Var(name, true)] += 1
+    labels = {}
+    for var in totals:
+        labels[var] = 1 if totals[var] > totals[~var] else 0
+    return {model_to_order(model)
+            for model in amc.maxplus_reduce(lin(votes[0]), labels).models()}
+
+
 def test():
     s = lin(range(4))
 
@@ -89,3 +134,25 @@ def test():
 
     assert not amc.SAT(s_3)
     assert amc.NUM_SAT(s_3) == 0
+
+    example_votes = [
+        ('a', 'b', 'c', 'd'),
+        ('a', 'b', 'c', 'd'),
+        ('b', 'a', 'c', 'd'),
+        ('b', 'a', 'c', 'd'),
+        ('b', 'c', 'a', 'd'),
+        ('b', 'c', 'a', 'd'),
+        ('d', 'c', 'a', 'b'),
+        ('d', 'c', 'a', 'b'),
+        ('d', 'c', 'a', 'b'),
+    ]
+
+    assert kemeny(example_votes) == {
+        ('b', 'c', 'a', 'd'),
+        ('a', 'b', 'c', 'd'),
+    }
+    assert slater(example_votes) == {
+        ('b', 'c', 'a', 'd'),
+        ('a', 'b', 'c', 'd'),
+        ('c', 'a', 'b', 'd')
+    }

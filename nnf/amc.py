@@ -137,15 +137,17 @@ def reduce(
         return max((a, b), key=add_key)
 
     if isinstance(node, Or):
-        if len(node.children) == 0:
-            return node
-        elif len(node.children) == 1:
-            return list(node.children)[0]
-        return max((reduce(child, add_key, mul, add_neut,
-                           mul_neut, labeling)
-                    for child in node.children),
-                   key=lambda child: add_key(eval(child, add, mul, add_neut,
-                                                  mul_neut, labeling)))
+        best = add_neut
+        candidates: t.List[NNF] = []
+        for child in node.children:
+            value = eval(child, add, mul, add_neut, mul_neut, labeling)
+            if value > best:  # type: ignore
+                best = value
+                candidates = [child]
+            elif value == best:
+                candidates.append(child)
+        return Or(reduce(candidate, add_key, mul, add_neut, mul_neut, labeling)
+                  for candidate in candidates)
     elif isinstance(node, And):
         return And(reduce(child, add_key, mul, add_neut, mul_neut, labeling)
                    for child in node.children)
@@ -153,5 +155,7 @@ def reduce(
         return node
 
 
-def maxplus_reduce(node: NNF, labeling: t.Callable[[Var], float]) -> NNF:
+def maxplus_reduce(node: NNF, labels: t.Dict[Var, float]) -> NNF:
+    def labeling(v: Var) -> float:
+        return labels[v]
     return reduce(node, lambda n: n, operator.add, -math.inf, 0, labeling)

@@ -192,7 +192,13 @@ class NNF:
                   for model in self.models())
 
     def to_model(self) -> Model:
-        """If the sentence directly represents a model, convert it to that."""
+        """If the sentence directly represents a model, convert it to that.
+
+        A sentence directly represents a model if it's a conjunction of
+        (unique) variables, or a single variable.
+        """
+        if isinstance(self, Var):
+            return {self.name: self.true}
         if not isinstance(self, And):
             raise TypeError("A sentence can only be converted to a model if "
                             "it's a conjunction of variables.")
