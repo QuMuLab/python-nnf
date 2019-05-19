@@ -125,6 +125,15 @@ def DNNF(draw):
     return sentence
 
 
+@st.composite
+def sd_DNNF(draw):
+    sentence = draw(NNF())
+    assume(sentence.decomposable())
+    assume(sentence.smooth())
+    assume(sentence.deterministic())
+    return sentence
+
+
 @given(DNF())
 def test_hyp(sentence: nnf.Or):
     assume(len(sentence.children) != 0)
@@ -153,13 +162,18 @@ def test_DNNF_sat_strategies(sentence: nnf.NNF):
     if sat:
         assert sentence.simplify() != nnf.false
         assert amc.SAT(sentence)
-        assert amc.NUM_SAT(sentence) > 0
         event("Sentence satisfiable")
     else:
         assert sentence.simplify() == nnf.false
         assert not amc.SAT(sentence)
-        assert amc.NUM_SAT(sentence) == 0
         event("Sentence not satisfiable")
+
+
+@given(sd_DNNF())
+def test_amc_numsat(sentence: nnf.NNF):
+    if not sentence.satisfiable():
+        event("Sentence not satisfiable")
+    assert amc.NUM_SAT(sentence) == len(list(sentence.models()))
 
 
 @given(NNF())

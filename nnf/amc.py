@@ -4,9 +4,10 @@ import operator
 
 import typing as t
 
-from nnf import NNF, And, Var, Or, Name, true, false
+from nnf import NNF, And, Var, Or, Internal, Name, true, false
 
 T = t.TypeVar('T')
+memoize = functools.lru_cache(maxsize=None)
 
 
 def eval(
@@ -18,27 +19,31 @@ def eval(
         labeling: t.Callable[[Var], T],
 ) -> T:
     """Execute an AMC technique, given a semiring and a labeling function."""
-    if node == true:
-        return mul_neut
-    if node == false:
-        return add_neut
-    if isinstance(node, Var):
-        return labeling(node)
-    if isinstance(node, Or):
-        return functools.reduce(
-            add,
-            (eval(child, add, mul, add_neut, mul_neut, labeling)
-             for child in node.children),
-            add_neut
-        )
-    if isinstance(node, And):
+    @memoize
+    def do_eval(node: NNF) -> T:
+        if node == true:
+            return mul_neut
+        elif node == false:
+            return add_neut
+        elif isinstance(node, Var):
+            return labeling(node)
+        assert isinstance(node, Internal)
+        if len(node.children) == 1:
+            return do_eval(*node.children)
+        if isinstance(node, Or):
+            return functools.reduce(
+                add,
+                (do_eval(child) for child in node.children),
+                add_neut
+            )
+        assert isinstance(node, And)
         return functools.reduce(
             mul,
-            (eval(child, add, mul, add_neut, mul_neut, labeling)
-             for child in node.children),
+            (do_eval(child) for child in node.children),
             mul_neut
         )
-    raise TypeError(type(node))
+
+    return do_eval(node)
 
 
 def _prob_label(probs: t.Dict[Name, float]) -> t.Callable[[Var], float]:
