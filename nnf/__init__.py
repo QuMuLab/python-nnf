@@ -55,6 +55,9 @@ def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
             yield {name: False, **model}
 
 
+T = t.TypeVar('T')
+
+
 class NNF:
     """Base class for all NNF sentences."""
 
@@ -363,6 +366,87 @@ class NNF:
             ),
             '}\n'
         ])
+
+    def transform(
+            self,
+            func: t.Callable[[t.Callable[[NNF], T], NNF], T]
+    ) -> T:
+        """A helper function to apply a transformation with memoization.
+
+        It should be passed a function that takes as its first argument a
+        function that wraps itself, to use for recursive calls.
+
+        For example::
+
+            def vars(transform, node):
+                if isinstance(node, Var):
+                    return {node.name}
+                else:
+                    return {name for child in node.children
+                           for name in transform(child)}
+
+            names = sentence.transform(vars)
+        """
+        @memoize
+        def transform(node: NNF) -> T:
+            return func(transform, node)
+
+        return transform(self)
+
+    def models_smart(self) -> t.Iterator[Model]:
+        """An alternative to .models().
+
+        Potentially much faster if there are few models, but potentially
+        much slower if there are many models.
+
+        A pathological case is `Or({Var(1), Var(2), Var(3), ...})`.
+        """
+        ModelInt = t.FrozenSet[t.Tuple[Name, bool]]
+
+        def compatible(a: ModelInt, b: ModelInt) -> bool:
+            if len(a) > len(b):
+                a, b = b, a
+            return not any((name, not value) in b for name, value in a)
+
+        def extract(
+                transform: t.Callable[[NNF], t.Iterable[ModelInt]],
+                node: NNF
+        ) -> t.Set[ModelInt]:
+            if isinstance(node, Var):
+                return {frozenset(((node.name, node.true),))}
+            elif isinstance(node, Or):
+                return {model
+                        for child in node.children
+                        for model in transform(child)}
+            elif isinstance(node, And):
+                models: t.Set[ModelInt] = {frozenset()}
+                for child in node.children:
+                    models = {existing | new
+                              for new in transform(child)
+                              for existing in models
+                              if compatible(existing, new)}
+                return models
+            raise TypeError(node)
+
+        names = self.vars()
+        full_models: t.Set[ModelInt] = set()
+
+        def complete(
+                model: ModelInt,
+                names: t.List[Name]
+        ) -> t.Iterator[ModelInt]:
+            for expansion in all_models(names):
+                yield frozenset(model | expansion.items())
+
+        for model in self.transform(extract):
+            missing_names = list(names - {name for name, value in model})
+            if not missing_names:
+                full_models.add(model)
+            else:
+                full_models.update(complete(model, missing_names))
+
+        for full_model in full_models:
+            yield dict(full_model)
 
 
 @dataclass(frozen=True)

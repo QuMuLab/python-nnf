@@ -318,3 +318,11 @@ def test_walk_unique_nodes(sentence: nnf.NNF):
 def test_to_model(model: dict):
     sentence = nnf.And(nnf.Var(k, v) for k, v in model.items())
     assert sentence.to_model() == model
+
+
+@given(NNF())
+def test_models_smart_equivalence(sentence: nnf.NNF):
+    dumb = list(sentence.models())
+    smart = list(sentence.models_smart())
+    assert len(dumb) == len(smart)
+    assert all(sentence.satisfied_by(model) for model in smart)
