@@ -104,15 +104,15 @@ def test():
     assert len(list(s.models())) == 24
 
     # unambiguous ordering
-    s_1 = s.instantiate({(0, 1): True, (1, 2): True, (2, 3): True})
+    s_1 = s.condition({(0, 1): True, (1, 2): True, (2, 3): True})
     assert list(s_1.models()) == [{(0, 2): True, (0, 3): True, (1, 3): True}]
 
     # ambiguous ordering
-    s_2 = s.instantiate({(0, 1): True, (1, 2): True, (2, 3): False})
+    s_2 = s.condition({(0, 1): True, (1, 2): True, (2, 3): False})
     assert len(list(s_2.models())) == 3
 
     # circular ordering
-    s_3 = s.instantiate({(0, 1): True, (1, 2): True, (0, 2): False})
+    s_3 = s.condition({(0, 1): True, (1, 2): True, (0, 2): False})
     assert len(list(s_3.models())) == 0
     assert not s_3.satisfiable()
     assert s_3.simplify() == nnf.false

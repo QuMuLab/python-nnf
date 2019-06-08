@@ -188,7 +188,7 @@ def test_simplify_preserves_meaning(sentence: nnf.NNF):
     for model in sentence.models():
         assert simple.satisfied_by(model)
     for model in simple.models():
-        assert sentence.instantiate(model).simplify() == nnf.true
+        assert sentence.condition(model).simplify() == nnf.true
 
 
 @given(NNF())
@@ -217,6 +217,16 @@ def test_simplify_merges_internal_nodes(sentence: nnf.NNF):
         if isinstance(node, nnf.Internal):
             for child in node.children:
                 assert type(node) != type(child)
+
+
+@given(DNNF())
+def test_simplify_solves_DNNF_satisfiability(sentence: nnf.NNF):
+    if sentence.satisfiable():
+        event("Sentence is satisfiable")
+        assert sentence.simplify() != nnf.false
+    else:
+        event("Sentence is not satisfiable")
+        assert sentence.simplify() == nnf.false
 
 
 def test_dimacs_sat_serialize():
@@ -326,3 +336,9 @@ def test_models_smart_equivalence(sentence: nnf.NNF):
     smart = list(sentence.models_smart())
     assert len(dumb) == len(smart)
     assert all(sentence.satisfied_by(model) for model in smart)
+
+
+def test_size():
+    assert (a & b).size() == 2
+    assert (a & (a | b)).size() == 4
+    assert ((a | b) & (~a | ~b)).size() == 6

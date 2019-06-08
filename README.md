@@ -31,7 +31,7 @@ False
 You can also fill in a value for some of the variables:
 
 ```pycon
->>> sentence.instantiate({'b': True})
+>>> sentence.condition({'b': True})
 Or({And({a, true}), And({a, false})})
 ```
 

@@ -88,7 +88,13 @@ class NNF:
 
     def size(self) -> int:
         """The number of edges in the sentence."""
-        return 0
+        def edge_count(transform: t.Callable[[NNF], int], node: NNF) -> int:
+            if isinstance(node, Internal):
+                return len(node.children) + sum(transform(child)
+                                                for child in node.children)
+            return 0
+
+        return self.transform(edge_count)
 
     def height(self) -> int:
         """The number of edges between here and the furthest leaf."""
@@ -172,8 +178,11 @@ class NNF:
 
     def satisfiable(self) -> bool:
         """Some set of values exists that makes the sentence correct."""
+        # todo: if decomposable, use less expensive check
         return any(self.satisfied_by(model)
                    for model in all_models(self.vars()))
+
+    consistent = satisfiable  # synonym
 
     def models(self) -> t.Iterator[Model]:
         """Yield all dictionaries of values that make the sentence correct."""
@@ -216,7 +225,7 @@ class NNF:
 
         return model
 
-    def instantiate(self, model: Model) -> NNF:
+    def condition(self, model: Model) -> NNF:
         """Fill in all the values in the dictionary."""
         return self
 
@@ -486,7 +495,7 @@ class Var(NNF):
     def satisfied_by(self, model: Model) -> bool:
         return model[self.name] if self.true else not model[self.name]
 
-    def instantiate(self, model: Model) -> NNF:
+    def condition(self, model: Model) -> NNF:
         if self.name in model:
             if self.true == model[self.name]:
                 return true
@@ -516,10 +525,6 @@ class Internal(NNF):
         else:
             return f"{self.__class__.__name__}()"
 
-    def size(self) -> int:
-        return sum(1 + child.size()
-                   for child in self.children)
-
     def height(self) -> int:
         if self.children:
             return 1 + max(child.height()
@@ -543,8 +548,8 @@ class Internal(NNF):
                 variables.add(child.name)
         return True
 
-    def instantiate(self, model: Model) -> NNF:
-        return self.__class__(child.instantiate(model)
+    def condition(self, model: Model) -> NNF:
+        return self.__class__(child.condition(model)
                               for child in self.children)
 
 
