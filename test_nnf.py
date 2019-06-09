@@ -6,7 +6,7 @@ from hypothesis import assume, event, given, strategies as st
 
 import nnf
 
-from nnf import Var, And, Or, amc, dimacs
+from nnf import Var, And, Or, amc, dimacs, dsharp
 
 a, b, c = Var('a'), Var('b'), Var('c')
 
@@ -309,12 +309,31 @@ def test_dimacs_cnf_serialize_accepts_only_cnf(sentence: nnf.NNF):
         ('bf0432-007.cnf', 3667),
         ('sw100-1.cnf', 3100),
         ('uuf250-01.cnf', 1065),
+        ('uf20-01.cnf', 90),
     ]
 )
 def test_cnf_benchmark_data(fname: str, clauses: int):
     with open(os.path.dirname(__file__) + '/testdata/satlib/' + fname) as f:
         sentence = dimacs.load(f)
     assert isinstance(sentence, And) and len(sentence.children) == clauses
+
+
+@pytest.mark.parametrize(
+    'fname',
+    [
+        'uf20-01'
+    ]
+)
+def test_dsharp_output(fname: str):
+    basepath = os.path.dirname(__file__) + '/testdata/satlib/' + fname
+    with open(basepath + '.nnf') as f:
+        sentence = dsharp.load(f)
+    with open(basepath + '.cnf') as f:
+        clauses = dimacs.load(f)
+    assert sentence.decomposable()
+    # unfortunately really expensive
+    assert all(clauses.satisfied_by(model) for model in sentence.models())
+    assert all(sentence.satisfied_by(model) for model in clauses.models())
 
 
 @given(NNF())
