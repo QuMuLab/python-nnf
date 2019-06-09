@@ -156,3 +156,7 @@ def test():
         ('a', 'b', 'c', 'd'),
         ('c', 'a', 'b', 'd')
     }
+
+
+if __name__ == '__main__':
+    test()
