@@ -6,7 +6,7 @@ import itertools
 
 import nnf
 
-from nnf import amc
+from nnf import amc, And, Or, Var
 
 memoize = functools.lru_cache(None)  # huge speedup
 
@@ -98,6 +98,33 @@ def slater(votes):
             for model in amc.maxplus_reduce(lin(votes[0]), labels).models()}
 
 
+def lin_top(candidates, k):
+    candidates = frozenset(candidates)
+    n = len(candidates)
+    T = frozenset(subset for subset in powerset(candidates)
+                  if len(subset) <= k)
+
+    f_i = itertools.chain.from_iterable
+
+    @memoize
+    def C(S):
+        if len(S) < k:
+            return Or(C_child(i, S)
+                      for i in candidates - S)
+        return And(~Var((i, j))
+                   for i in candidates - S
+                   for j in candidates - S
+                   if i != j)
+
+    @memoize
+    def C_child(i, S):
+        return And(f_i((Var((i, j)), ~Var((j, i)), C(S | {i}))
+                   for j in candidates - S
+                   if i != j))
+
+    return C(frozenset())
+
+
 def test():
     s = lin(range(4))
 
@@ -156,6 +183,9 @@ def test():
         ('a', 'b', 'c', 'd'),
         ('c', 'a', 'b', 'd')
     }
+
+    s_top = lin_top(range(4), 2)
+    assert s_top.decomposable()
 
 
 if __name__ == '__main__':
