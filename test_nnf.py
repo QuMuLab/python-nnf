@@ -331,9 +331,8 @@ def test_dsharp_output(fname: str):
     with open(basepath + '.cnf') as f:
         clauses = dimacs.load(f)
     assert sentence.decomposable()
-    # unfortunately really expensive
+    # this is not a complete check, but clauses.models() is very expensive
     assert all(clauses.satisfied_by(model) for model in sentence.models())
-    assert all(sentence.satisfied_by(model) for model in clauses.models())
 
 
 @given(NNF())

@@ -39,6 +39,9 @@ memoize = functools.lru_cache(maxsize=None)
 #   - try using memoize in more places
 #   - to_model(self) -> Model
 
+__all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Builder', 'all_models',
+           'decision', 'true', 'false', 'dsharp', 'dimacs', 'amc')
+
 
 def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
     """Yield dictionaries with all possible boolean values for the names.
@@ -56,6 +59,7 @@ def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
 
 
 T = t.TypeVar('T')
+_Tristate = t.Optional[bool]
 
 
 class NNF:
@@ -98,7 +102,13 @@ class NNF:
 
     def height(self) -> int:
         """The number of edges between here and the furthest leaf."""
-        return 0
+        @memoize
+        def height(node: NNF) -> int:
+            if isinstance(node, Internal) and node.children:
+                return 1 + max(height(child) for child in node.children)
+            return 0
+
+        return height(self)
 
     def leaf(self) -> bool:
         """True if the node doesn't have children."""
@@ -133,11 +143,15 @@ class NNF:
 
     def decomposable(self) -> bool:
         """The children of each And node don't share variables, recursively."""
+        @memoize
+        def var(node: NNF) -> t.FrozenSet[Name]:
+            return node.vars()
+
         for node in self.walk():
             if isinstance(node, And):
                 seen: t.Set[Name] = set()
                 for child in node.children:
-                    for name in child.vars():
+                    for name in var(child):
                         if name in seen:
                             return False
                         seen.add(name)
@@ -174,24 +188,88 @@ class NNF:
 
     def satisfied_by(self, model: Model) -> bool:
         """The given dictionary of values makes the sentence correct."""
-        raise NotImplementedError
+        @memoize
+        def sat(node: NNF) -> bool:
+            if isinstance(node, Var):
+                if node.name not in model:
+                    # Note: because any and all are lazy, it's possible for
+                    # this error not to occur even if a variable is missing.
+                    # In such a case including the variable with any value
+                    # would not affect the return value though.
+                    raise ValueError(
+                        f"Model does not contain variable {node.name!r}"
+                    )
+                return model[node.name] == node.true
+            elif isinstance(node, Or):
+                return any(sat(child) for child in node.children)
+            elif isinstance(node, And):
+                return all(sat(child) for child in node.children)
+            else:
+                raise TypeError(node)
 
-    def satisfiable(self) -> bool:
+        return sat(self)
+
+    def satisfiable(self, decomposable: _Tristate = None) -> bool:
         """Some set of values exists that makes the sentence correct."""
         # todo: if decomposable, use less expensive check
+        if decomposable is None:
+            decomposable = self.decomposable()
+        if decomposable:
+            def sat(transform: t.Callable[[NNF], bool], node: NNF) -> bool:
+                if isinstance(node, Or):
+                    return any(transform(child) for child in node.children)
+                    # note: if node == false this path is followed
+                elif isinstance(node, And):
+                    return all(transform(child) for child in node.children)
+                return True
+
+            return self.transform(sat)
+
         return any(self.satisfied_by(model)
                    for model in all_models(self.vars()))
 
+    def _consistent_with_model(self, model: Model) -> bool:
+        """A combination of `condition` and `satisfiable`.
+
+        Only works on decomposable sentences, but doesn't check for the
+        property. Use with care.
+        """
+        @memoize
+        def con(node: NNF) -> bool:
+            if isinstance(node, Var):
+                if node.name not in model:
+                    return True
+                if model[node.name] == node.true:
+                    return True
+                return False
+            elif isinstance(node, Or):
+                return any(con(child) for child in node.children)
+            elif isinstance(node, And):
+                return all(con(child) for child in node.children)
+            else:
+                raise TypeError(node)
+
+        return con(self)
+
     consistent = satisfiable  # synonym
 
-    def models(self) -> t.Iterator[Model]:
+    def models(self, decomposable: _Tristate = None) -> t.Iterator[Model]:
         """Yield all dictionaries of values that make the sentence correct."""
-        for model in all_models(self.vars()):
-            if self.satisfied_by(model):
-                yield model
+        if decomposable is None:
+            decomposable = self.decomposable()
+        if decomposable:
+            yield from self._models_decomposable()
+        else:
+            for model in all_models(self.vars()):
+                if self.satisfied_by(model):
+                    yield model
 
     def contradicts(self, other: NNF) -> bool:
         """There is no set of values that satisfies both sentences."""
+        if self.vars() != other.vars():
+            raise ValueError("Sentences mention different variables")
+        # TODO: be smart about this
+        #       decomposability matters
         for model in self.models():
             if other.satisfied_by(model):
                 return False
@@ -227,7 +305,23 @@ class NNF:
 
     def condition(self, model: Model) -> NNF:
         """Fill in all the values in the dictionary."""
-        return self
+        @memoize
+        def cond(node: NNF) -> NNF:
+            if isinstance(node, Var):
+                if node.name not in model:
+                    return node
+                if model[node.name] == node.true:
+                    return true
+                return false
+            elif isinstance(node, Internal):
+                new = node.__class__(map(cond, node.children))
+                if new != node:
+                    return new
+                return node
+            else:
+                raise TypeError(type(node))
+
+        return cond(self)
 
     def simplify(self) -> NNF:
         """Apply the following transformations to make the sentence simpler:
@@ -457,6 +551,37 @@ class NNF:
         for full_model in full_models:
             yield dict(full_model)
 
+    def _models_decomposable(self) -> t.Iterator[Model]:
+        """Model enumeration for decomposable sentences."""
+        if not self.satisfiable(decomposable=True):
+            return
+        names = tuple(self.vars())
+        model_tree: t.Dict[bool, t.Any] = {}
+
+        def leaves(
+                tree: t.Dict[bool, t.Any],
+                path: t.Tuple[bool, ...] = ()
+        ) -> t.Iterator[t.Tuple[t.Dict[bool, t.Any], t.Tuple[bool, ...]]]:
+            if not tree:
+                yield tree, path
+            else:
+                for key, val in tree.items():
+                    yield from leaves(val, path + (key,))
+
+        for var in names:
+            for leaf, path in leaves(model_tree):
+                model = dict(zip(names, path))
+                model[var] = True
+                if self._consistent_with_model(model):
+                    leaf[True] = {}
+                model[var] = False
+                if self._consistent_with_model(model):
+                    leaf[False] = {}
+                assert leaf  # at least one of them has to be satisfiable
+
+        for leaf, path in leaves(model_tree):
+            yield dict(zip(names, path))
+
 
 @dataclass(frozen=True)
 class Var(NNF):
@@ -492,18 +617,6 @@ class Var(NNF):
     def __invert__(self) -> Var:
         return Var(self.name, not self.true)
 
-    def satisfied_by(self, model: Model) -> bool:
-        return model[self.name] if self.true else not model[self.name]
-
-    def condition(self, model: Model) -> NNF:
-        if self.name in model:
-            if self.true == model[self.name]:
-                return true
-            else:
-                return false
-        else:
-            return self
-
 
 @dataclass(frozen=True, init=False)
 class Internal(NNF):
@@ -525,12 +638,6 @@ class Internal(NNF):
         else:
             return f"{self.__class__.__name__}()"
 
-    def height(self) -> int:
-        if self.children:
-            return 1 + max(child.height()
-                           for child in self.children)
-        return 0
-
     def leaf(self) -> bool:
         if self.children:
             return False
@@ -548,17 +655,9 @@ class Internal(NNF):
                 variables.add(child.name)
         return True
 
-    def condition(self, model: Model) -> NNF:
-        return self.__class__(child.condition(model)
-                              for child in self.children)
-
 
 class And(Internal):
     """Conjunction nodes, which are only true if all of their children are."""
-    def satisfied_by(self, model: Model) -> bool:
-        return all(child.satisfied_by(model)
-                   for child in self.children)
-
     def decision_node(self) -> bool:
         if not self.children:
             return True
@@ -572,10 +671,6 @@ class And(Internal):
 
 class Or(Internal):
     """Disjunction nodes, which are true if any of their children are."""
-    def satisfied_by(self, model: Model) -> bool:
-        return any(child.satisfied_by(model)
-                   for child in self.children)
-
     def decision_node(self) -> bool:
         if not self.children:
             return True  # boolean
