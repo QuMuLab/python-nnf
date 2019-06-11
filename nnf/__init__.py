@@ -438,13 +438,12 @@ class NNF:
 
         DOT is a graph visualization language.
         """
-        # TODO: sort in some clever way for deterministic output
         # TODO: offer more knobs
         #       - add own directives
         #       - set different palette
         counter = itertools.count()
         names: t.Dict[NNF, t.Tuple[int, str, str]] = {}
-        arrows: t.Set[t.Tuple[int, int]] = set()
+        arrows: t.List[t.Tuple[int, int]] = []
 
         def name(node: NNF) -> int:
             if node not in names:
@@ -468,11 +467,12 @@ class NNF:
                     raise TypeError(f"Can't handle node of type {type(node)}")
             return names[node][0]
 
-        for node in self.walk():
+        for node in sorted(self.walk()):
             name(node)
+        for node in sorted(self.walk()):
             if isinstance(node, Internal):
-                for child in node.children:
-                    arrows.add((name(node), name(child)))
+                for child in sorted(node.children):
+                    arrows.append((name(node), name(child)))
 
         return '\n'.join([
             'digraph {',
@@ -600,6 +600,42 @@ class NNF:
         for leaf, path in leaves(model_tree):
             yield dict(zip(names, path))
 
+    def _sorting_key(self) -> t.Tuple[t.Any, ...]:
+        """Used for sorting nodes in a (mostly) consistent order.
+
+        The sorting is fairly arbitrary, and mostly tuned to make .to_DOT()
+        output nice. The rules are approximately:
+        - Variables first
+        - Variables with lower-sorting stringified names first
+        - Negations last
+        - Nodes with a lower height first
+        - Nodes with fewer children first
+        - Nodes with higher-sorting children last
+
+        Note that Var(10) and Var("10") are sorted as equal.
+        """
+        raise NotImplementedError
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, NNF):
+            return NotImplemented
+        return self._sorting_key() < other._sorting_key()
+
+    def __le__(self, other: object) -> bool:
+        if not isinstance(other, NNF):
+            return NotImplemented
+        return self._sorting_key() <= other._sorting_key()
+
+    def __gt__(self, other: object) -> bool:
+        if not isinstance(other, NNF):
+            return NotImplemented
+        return self._sorting_key() > other._sorting_key()
+
+    def __ge__(self, other: object) -> bool:
+        if not isinstance(other, NNF):
+            return NotImplemented
+        return self._sorting_key() >= other._sorting_key()
+
 
 class Var(NNF):
     """A variable, or its negation.
@@ -654,6 +690,9 @@ class Var(NNF):
     def __invert__(self) -> 'Var':
         return Var(self.name, not self.true)
 
+    def _sorting_key(self) -> t.Tuple[bool, str, bool]:
+        return False, str(self.name), not self.true
+
 
 class Internal(NNF):
     """Base class for internal nodes, i.e. And and Or nodes."""
@@ -701,6 +740,10 @@ class Internal(NNF):
                     return False
                 variables.add(child.name)
         return True
+
+    def _sorting_key(self) -> t.Tuple[bool, int, int, str, t.List[NNF]]:
+        return (True, self.height(), len(self.children),
+                self.__class__.__name__, sorted(self.children, reverse=True))
 
 
 class And(Internal):
