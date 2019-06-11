@@ -51,7 +51,7 @@ This package takes much of its data model and terminology from
 pip install nnf
 ```
 
-Only Python 3.7 or higher is currently supported.
+At least Python 3.6 is required.
 
 # Serialization
 

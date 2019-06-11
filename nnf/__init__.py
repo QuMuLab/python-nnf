@@ -12,8 +12,6 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-from __future__ import annotations
-
 import functools
 import itertools
 import typing as t
@@ -57,15 +55,15 @@ _Tristate = t.Optional[bool]
 class NNF:
     """Base class for all NNF sentences."""
 
-    def __and__(self, other: NNF) -> NNF:
+    def __and__(self, other: 'NNF') -> 'NNF':
         """And({self, other})"""
         return And({self, other})
 
-    def __or__(self, other: NNF) -> NNF:
+    def __or__(self, other: 'NNF') -> 'NNF':
         """Or({self, other})"""
         return Or({self, other})
 
-    def walk(self) -> t.Iterator[NNF]:
+    def walk(self) -> t.Iterator['NNF']:
         """Yield all nodes in the sentence, depth-first.
 
         Nodes that appear multiple times are yielded only once.
@@ -256,7 +254,7 @@ class NNF:
                 if self.satisfied_by(model):
                     yield model
 
-    def contradicts(self, other: NNF) -> bool:
+    def contradicts(self, other: 'NNF') -> bool:
         """There is no set of values that satisfies both sentences."""
         if self.vars() != other.vars():
             raise ValueError("Sentences mention different variables")
@@ -267,7 +265,7 @@ class NNF:
                 return False
         return True
 
-    def to_MODS(self) -> NNF:
+    def to_MODS(self) -> 'NNF':
         """Convert the sentence to a MODS sentence."""
         return Or(And(Var(name, val)
                       for name, val in model.items())
@@ -295,7 +293,7 @@ class NNF:
 
         return model
 
-    def condition(self, model: Model) -> NNF:
+    def condition(self, model: Model) -> 'NNF':
         """Fill in all the values in the dictionary."""
         @memoize
         def cond(node: NNF) -> NNF:
@@ -315,7 +313,7 @@ class NNF:
 
         return cond(self)
 
-    def simplify(self) -> NNF:
+    def simplify(self) -> 'NNF':
         """Apply the following transformations to make the sentence simpler:
 
         - If an And node has `false` as a child, replace it by `false`
@@ -367,7 +365,7 @@ class NNF:
 
         return simple(self)
 
-    def deduplicate(self) -> NNF:
+    def deduplicate(self) -> 'NNF':
         """Return a copy of the sentence without any duplicate objects.
 
         If a node has multiple parents, it's possible for it to be
@@ -464,7 +462,7 @@ class NNF:
 
     def transform(
             self,
-            func: t.Callable[[t.Callable[[NNF], T], NNF], T]
+            func: t.Callable[[t.Callable[['NNF'], T], 'NNF'], T]
     ) -> T:
         """A helper function to apply a transformation with memoization.
 
@@ -625,7 +623,7 @@ class Var(NNF):
             base = f"{self.__class__.__name__}({self.name!r})"
             return base if self.true else f"~{base}"
 
-    def __invert__(self) -> Var:
+    def __invert__(self) -> 'Var':
         return Var(self.name, not self.true)
 
 
