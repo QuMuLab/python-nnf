@@ -18,8 +18,6 @@ import functools
 import itertools
 import typing as t
 
-from dataclasses import dataclass
-
 import nnf
 
 Name = t.Hashable
@@ -28,16 +26,10 @@ Model = t.Dict[Name, bool]
 memoize = functools.lru_cache(maxsize=None)
 
 # TODO:
-#   - Make Internal inherit directly from frozenset?
-#     - No, code becomes less readable and equality and operators go bad
-#   - Stop using dataclasses?
 #   - Compatibility with earlier Python versions?
-#   - __slots__ (blocked by dataclass default values)
 #   - Generic types for NNF and Internal?
 #   - isinstance(true, Internal) is currently true, look for weird effects
-#   - add __all__
 #   - try using memoize in more places
-#   - to_model(self) -> Model
 
 __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Builder', 'all_models',
            'decision', 'true', 'false', 'dsharp', 'dimacs', 'amc')
@@ -583,7 +575,6 @@ class NNF:
             yield dict(zip(names, path))
 
 
-@dataclass(frozen=True)
 class Var(NNF):
     """A variable, or its negation.
 
@@ -605,7 +596,27 @@ class Var(NNF):
     """
 
     name: Name
-    true: bool = True
+    true: bool
+
+    __slots__ = ('name', 'true')
+
+    def __init__(self, name: Name, true: bool = True) -> None:
+        object.__setattr__(self, 'name', name)
+        object.__setattr__(self, 'true', true)
+
+    def __eq__(self, other: t.Any) -> bool:
+        return (self.__class__ is other.__class__
+                and self.name == other.name
+                and self.true == other.true)
+
+    def __hash__(self) -> int:
+        return hash((self.name, self.true))
+
+    def __setattr__(self, key: str, value: object) -> None:
+        raise TypeError(f"{self.__class__.__name__} objects are immutable")
+
+    def __delattr__(self, name: str) -> None:
+        raise TypeError(f"{self.__class__.__name__} objects are immutable")
 
     def __repr__(self) -> str:
         if isinstance(self.name, str):
@@ -618,18 +629,28 @@ class Var(NNF):
         return Var(self.name, not self.true)
 
 
-@dataclass(frozen=True, init=False)
 class Internal(NNF):
     """Base class for internal nodes, i.e. And and Or nodes."""
-
-    # add __len__, __iter__ etc for .children?
     children: t.FrozenSet[NNF]
 
     __slots__ = ()
 
     def __init__(self, children: t.Iterable[NNF] = ()) -> None:
-        # needed because the dataclass is frozen
+        # needed because of immutability
         object.__setattr__(self, 'children', frozenset(children))
+
+    def __eq__(self, other: t.Any) -> bool:
+        return (self.__class__ is other.__class__
+                and self.children == other.children)
+
+    def __hash__(self) -> int:
+        return hash((self.children,))
+
+    def __setattr__(self, key: str, value: object) -> None:
+        raise TypeError(f"{self.__class__.__name__} objects are immutable")
+
+    def __delattr__(self, name: str) -> None:
+        raise TypeError(f"{self.__class__.__name__} objects are immutable")
 
     def __repr__(self) -> str:
         if self.children:
