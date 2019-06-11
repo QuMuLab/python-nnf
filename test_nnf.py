@@ -356,7 +356,37 @@ def test_models_smart_equivalence(sentence: nnf.NNF):
     assert all(sentence.satisfied_by(model) for model in smart)
 
 
-def test_size():
-    assert (a & b).size() == 2
-    assert (a & (a | b)).size() == 4
-    assert ((a | b) & (~a | ~b)).size() == 6
+@pytest.mark.parametrize(
+    'sentence, size',
+    [
+        ((a & b), 2),
+        (a & (a | b), 4),
+        ((a | b) & (~a | ~b), 6),
+        (And({
+            Or({a, b}),
+            And({a, Or({a, b})}),
+        }), 6)
+    ]
+)
+def test_size(sentence: nnf.NNF, size: int):
+    assert sentence.size() == size
+
+
+@pytest.mark.parametrize(
+    'a, b, contradictory',
+    [
+        (a, ~a, True),
+        (a, b, False),
+        (a, a, False),
+        (a & b, a & ~b, True),
+        (a & (a | b), b, False),
+        (a & (a | b), ~a, True),
+    ]
+)
+def test_contradicts(a: nnf.NNF, b: nnf.NNF, contradictory: bool):
+    assert a.contradicts(b) == contradictory
+
+
+@given(NNF())
+def test_false_contradicts_everything(sentence: nnf.NNF):
+    assert nnf.false.contradicts(sentence)

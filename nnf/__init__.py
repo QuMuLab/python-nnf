@@ -23,12 +23,6 @@ Model = t.Dict[Name, bool]
 
 memoize = functools.lru_cache(maxsize=None)
 
-# TODO:
-#   - Compatibility with earlier Python versions?
-#   - Generic types for NNF and Internal?
-#   - isinstance(true, Internal) is currently true, look for weird effects
-#   - try using memoize in more places
-
 __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Builder', 'all_models',
            'decision', 'true', 'false', 'dsharp', 'dimacs', 'amc')
 
@@ -81,14 +75,14 @@ class NNF:
                         nodes.append(child)
 
     def size(self) -> int:
-        """The number of edges in the sentence."""
-        def edge_count(transform: t.Callable[[NNF], int], node: NNF) -> int:
-            if isinstance(node, Internal):
-                return len(node.children) + sum(transform(child)
-                                                for child in node.children)
-            return 0
+        """The number of edges in the sentence.
 
-        return self.transform(edge_count)
+        Note that sentences are rooted DAGs, not trees. If a node has
+        multiple parents its edges will still be counted just once.
+        """
+        return sum(len(node.children)
+                   for node in self.walk()
+                   if isinstance(node, Internal))
 
     def height(self) -> int:
         """The number of edges between here and the furthest leaf."""
@@ -150,7 +144,7 @@ class NNF:
     def deterministic(self) -> bool:
         """The children of each Or node contradict each other.
 
-        Warning: expensive!
+        May be very expensive.
         """
         for node in self.walk():
             if isinstance(node, Or):
@@ -162,7 +156,7 @@ class NNF:
     def smooth(self) -> bool:
         """The children of each Or node all use the same variables."""
         for node in self.walk():
-            if isinstance(node, Or):
+            if isinstance(node, Or) and len(node.children) > 1:
                 expected = None
                 for child in node.children:
                     if expected is None:
@@ -201,22 +195,37 @@ class NNF:
 
     def satisfiable(self, decomposable: _Tristate = None) -> bool:
         """Some set of values exists that makes the sentence correct."""
-        # todo: if decomposable, use less expensive check
+        if not self._satisfiable_decomposable():
+            return False
+
         if decomposable is None:
             decomposable = self.decomposable()
-        if decomposable:
-            def sat(transform: t.Callable[[NNF], bool], node: NNF) -> bool:
-                if isinstance(node, Or):
-                    return any(transform(child) for child in node.children)
-                    # note: if node == false this path is followed
-                elif isinstance(node, And):
-                    return all(transform(child) for child in node.children)
-                return True
 
-            return self.transform(sat)
+        if decomposable:
+            # Would've been picked up already if not satisfiable
+            return True
 
         return any(self.satisfied_by(model)
                    for model in all_models(self.vars()))
+
+    def _satisfiable_decomposable(self) -> bool:
+        """Checks satisfiability of decomposable sentences.
+
+        If the sentence is not decomposable, it may return True even if the
+        sentence is not satisfiable. But if it returns False the sentence is
+        certainly not satisfiable.
+        """
+        @memoize
+        def sat(node: NNF) -> bool:
+            """Check satisfiability of DNNF."""
+            if isinstance(node, Or):
+                # note: if node == false this path is followed
+                return any(sat(child) for child in node.children)
+            elif isinstance(node, And):
+                return all(sat(child) for child in node.children)
+            return True
+
+        return sat(self)
 
     def _consistent_with_model(self, model: Model) -> bool:
         """A combination of `condition` and `satisfiable`.
@@ -254,14 +263,33 @@ class NNF:
                 if self.satisfied_by(model):
                     yield model
 
-    def contradicts(self, other: 'NNF') -> bool:
-        """There is no set of values that satisfies both sentences."""
-        if self.vars() != other.vars():
-            raise ValueError("Sentences mention different variables")
-        # TODO: be smart about this
-        #       decomposability matters
-        for model in self.models():
-            if other.satisfied_by(model):
+    def contradicts(
+            self,
+            other: 'NNF',
+            decomposable: _Tristate = None
+    ) -> bool:
+        """There is no set of values that satisfies both sentences.
+
+        May be very expensive.
+        """
+        if decomposable is None:
+            decomposable = self.decomposable() and other.decomposable()
+
+        if len(self.vars()) > len(other.vars()):
+            # The one with the fewest vars has the smallest models
+            a, b = other, self
+        else:
+            a, b = self, other
+
+        if decomposable:
+            for model in a.models(decomposable=True):
+                if b._consistent_with_model(model):
+                    return False
+            return True
+
+        for model in b.models():
+            # Hopefully, a.vars() <= b.vars() and .satisfiable() is fast
+            if a.condition(model).satisfiable():
                 return False
         return True
 
