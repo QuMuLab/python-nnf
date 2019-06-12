@@ -1,7 +1,5 @@
-"""A parser and serializer for the DIMACS CNF and SAT formats.
-
-https://www.cs.ubc.ca/~hoos/SATLIB/benchm.html
-"""
+"""A parser and serializer for the DIMACS
+`CNF and SAT formats <https://www.cs.ubc.ca/~hoos/SATLIB/benchm.html>`_."""
 
 import collections
 import io
@@ -10,7 +8,7 @@ import warnings
 
 from nnf import NNF, Var, And, Or, Name, true, false
 
-# TODO: cnf format
+__all__ = ('dump', 'load', 'dumps', 'loads')
 
 
 def dump(
@@ -22,6 +20,23 @@ def dump(
         comment_header: t.Optional[str] = None,
         mode: str = 'sat'
 ) -> None:
+    """Dump a sentence into an open file in a DIMACS format.
+
+    Variable names have to be integers. If the variables in the sentence you
+    want to dump are not integers, you can pass a ``var_labels`` dictionary
+    to map names to integers.
+
+    :param obj: The sentence to dump.
+    :param fp: The open file.
+    :param num_variables: Override the number of variables, in case there
+                          are variables that don't appear in the sentence.
+    :param var_labels: A dictionary mapping variable names to integers,
+                       to rename non-integer variables.
+    :param comment_header: A comment to include at the top of the file. May
+                           include newlines.
+    :param mode: Either ``'sat'`` to dump in the general SAT format,
+                 or ``'cnf'`` to dump in the specialized CNF format.
+    """
     num_vars: int
     if num_variables is None:
         if var_labels is None:
@@ -151,6 +166,7 @@ def dumps(
         comment_header: t.Optional[str] = None,
         mode: str = 'sat'
 ) -> str:
+    """Like :func:`dump`, but to a string instead of to a file."""
     buffer = io.StringIO()
     dump(obj, buffer, num_variables=num_variables, var_labels=var_labels,
          comment_header=comment_header, mode=mode)
@@ -158,6 +174,10 @@ def dumps(
 
 
 def load(fp: t.TextIO) -> NNF:
+    """Load a sentence from an open file.
+
+    The format is automatically detected.
+    """
     for line in fp:
         if line.startswith('c'):
             continue
@@ -188,6 +208,7 @@ def load(fp: t.TextIO) -> NNF:
 
 
 def loads(s: str) -> NNF:
+    """Like :func:`load`, but from a string instead of from a file."""
     return load(io.StringIO(s))
 
 

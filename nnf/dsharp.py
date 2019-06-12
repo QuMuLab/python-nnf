@@ -1,8 +1,8 @@
-"""A parser for DSHARP's output format.
+"""A parser for `DSHARP <https://bitbucket.org/haz/dsharp>`_'s output format.
 
 Derived by closely studying its output and source code. This format might
-be some sort of established standard, in which case this parser might reject
-some valid files in the format.
+be some sort of established standard, in which case this parser might
+reject or misinterpret some valid files in the format.
 """
 
 import io
@@ -10,8 +10,11 @@ import typing as t
 
 from nnf import NNF, And, Or, Var
 
+__all__ = ('load', 'loads')
+
 
 def load(fp: t.TextIO) -> NNF:
+    """Load a sentence from an open file."""
     fmt, nodecount, edges, varcount = fp.readline().split()
     node_specs = dict(enumerate(line.split() for line in fp))
     assert fmt == 'nnf'
@@ -32,4 +35,5 @@ def load(fp: t.TextIO) -> NNF:
 
 
 def loads(s: str) -> NNF:
+    """Load a sentence from a string."""
     return load(io.StringIO(s))

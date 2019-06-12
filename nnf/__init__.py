@@ -60,7 +60,7 @@ class NNF:
     def walk(self) -> t.Iterator['NNF']:
         """Yield all nodes in the sentence, depth-first.
 
-        Nodes that appear multiple times are yielded only once.
+        Nodes with multiple parents are yielded only once.
         """
         # Could be made width-first by using a deque and popping from the left
         seen = {self}
@@ -95,7 +95,10 @@ class NNF:
         return height(self)
 
     def leaf(self) -> bool:
-        """True if the node doesn't have children."""
+        """True if the node doesn't have children.
+
+        That is, if the node is a variable, or one of ``true`` and ``false``.
+        """
         return True
 
     def flat(self) -> bool:
@@ -109,13 +112,13 @@ class NNF:
 
     def simply_disjunct(self) -> bool:
         """The children of Or nodes are leaves that don't share variables."""
-        return all(node.is_simple()
+        return all(node._is_simple()
                    for node in self.walk()
                    if isinstance(node, Or))
 
     def simply_conjunct(self) -> bool:
         """The children of And nodes are leaves that don't share variables."""
-        return all(node.is_simple()
+        return all(node._is_simple()
                    for node in self.walk()
                    if isinstance(node, And))
 
@@ -434,9 +437,10 @@ class NNF:
         return len(ids)
 
     def to_DOT(self, color: bool = False) -> str:
-        """Output a representation of the sentence in the DOT language.
+        """Return a representation of the sentence in the DOT language.
 
-        DOT is a graph visualization language.
+        `DOT <https://en.wikipedia.org/wiki/DOT_(graph_description_language)>`_
+        is a graph visualization language.
         """
         # TODO: offer more knobs
         #       - add own directives
@@ -655,6 +659,10 @@ class Var(NNF):
     Var(10)
     >>> Var(('a', 'b'), False)
     ~Var(('a', 'b'))
+
+    :ivar name: The name of the variable. Can be any hashable object.
+    :ivar true: Whether the variable is true. If ``False``, the variable is
+                negated.
     """
 
     name: Name
@@ -666,10 +674,10 @@ class Var(NNF):
         object.__setattr__(self, 'name', name)
         object.__setattr__(self, 'true', true)
 
-    def __eq__(self, other: t.Any) -> bool:
-        return (self.__class__ is other.__class__
-                and self.name == other.name
-                and self.true == other.true)
+    def __eq__(self, other: t.Any) -> t.Any:
+        if self.__class__ is other.__class__:
+            return self.name == other.name and self.true == other.true
+        return NotImplemented
 
     def __hash__(self) -> int:
         return hash((self.name, self.true))
@@ -704,9 +712,10 @@ class Internal(NNF):
         # needed because of immutability
         object.__setattr__(self, 'children', frozenset(children))
 
-    def __eq__(self, other: t.Any) -> bool:
-        return (self.__class__ is other.__class__
-                and self.children == other.children)
+    def __eq__(self, other: t.Any) -> t.Any:
+        if self.__class__ is other.__class__:
+            return self.children == other.children
+        return NotImplemented
 
     def __hash__(self) -> int:
         return hash((self.children,))
@@ -729,7 +738,7 @@ class Internal(NNF):
             return False
         return True
 
-    def is_simple(self) -> bool:
+    def _is_simple(self) -> bool:
         """Whether all children are leaves that don't share variables."""
         variables: t.Set[Name] = set()
         for child in self.children:
@@ -812,16 +821,23 @@ class Or(Internal):
 
 
 def decision(var: Var, if_true: NNF, if_false: NNF) -> Or:
-    """Create a decision node with a variable and two branches."""
+    """Create a decision node with a variable and two branches.
+
+    :param var: The variable node to decide on.
+    :param if_true: The branch if the decision is true.
+    :param if_false: The branch if the decision is false.
+    """
     return Or({And({var, if_true}), And({~var, if_false})})
 
 
+#: A node that's always true. Technically an And node without children.
 true = And()
+#: A node that's always false. Technically an Or node without children.
 false = Or()
 
 
 class Builder:
-    """Automatically deduplicates NNF nodes as you make them.
+    """Automatically deduplicates NNF nodes as you make them, to save memory.
 
     Usage:
 
@@ -830,9 +846,16 @@ class Builder:
     >>> var2 = builder.Var('A')
     >>> var is var2
     True
+
+    As long as the Builder object exists, the nodes it made will be kept in
+    memory. Make sure not to keep it around longer than you need.
+
+    It's often a better idea to avoid creating nodes multiple times in the
+    first place. That will save processing time as well as memory.
     """
     # TODO: deduplicate vars that are negated using the operator
     def __init__(self, seed: t.Iterable[NNF] = ()):
+        """:param seed: Nodes to store for reuse in advance."""
         self.stored: t.Dict[NNF, NNF] = {true: true, false: false}
         for node in seed:
             self.stored[node] = node

@@ -1,3 +1,6 @@
+"""An implementation of
+`algebraic model counting <https://arxiv.org/abs/1211.4475>`_."""
+
 import functools
 import math
 import operator
@@ -9,6 +12,9 @@ from nnf import NNF, And, Var, Or, Internal, Name, true, false
 T = t.TypeVar('T')
 memoize = functools.lru_cache(maxsize=None)
 
+__all__ = ('eval', 'reduce', 'SAT', 'NUM_SAT', 'WMC', 'PROB', 'GRAD', 'MPE',
+           'maxplus_reduce')
+
 
 def eval(
         node: NNF,
@@ -18,7 +24,16 @@ def eval(
         mul_neut: T,
         labeling: t.Callable[[Var], T],
 ) -> T:
-    """Execute an AMC technique, given a semiring and a labeling function."""
+    """Execute an AMC technique, given a semiring and a labeling function.
+
+    :param node: The sentence to calculate the value of.
+    :param add: The ⊕ operator, to combine :class:`nnf.Or` nodes.
+    :param mul: The ⊗ operator, to combine :class:`nnf.And` nodes.
+    :param add_neut: e^⊕, the neutral element of the ⊕ operator.
+    :param mul_neut: e^⊗, the neutral element of the ⊗ operator.
+    :param labeling: The labeling function, to assign a value to each
+                     variable node.
+    """
     @memoize
     def do_eval(node: NNF) -> T:
         if node == true:
@@ -73,6 +88,11 @@ def NUM_SAT(node: NNF) -> int:
 
 
 def WMC(node: NNF, weights: t.Callable[[Var], float]) -> float:
+    """Model counting of sd-DNNF sentences, weighted by variables.
+
+    :param node: The sentence to measure.
+    :param weights: A dictionary mapping variable nodes to weights.
+    """
     # General ×
     # Non-idempotent +
     # Non-neutral +
@@ -81,6 +101,11 @@ def WMC(node: NNF, weights: t.Callable[[Var], float]) -> float:
 
 
 def PROB(node: NNF, probs: t.Dict[Name, float]) -> float:
+    """Model counting of d-DNNF sentences, weighted by probabilities.
+
+    :param node: The sentence to measure.
+    :param probs: A dictionary mapping variable names to probabilities.
+    """
     # General ×
     # Non-idempotent +
     # Neutral +
@@ -96,6 +121,15 @@ def GRAD(
         probs: t.Dict[Name, float],
         k: t.Optional[Name] = None
 ) -> GradProb:
+    """Calculate a gradient of a d-DNNF sentence being true depending on the
+    value of a variable, given probabilities for all variables.
+
+    :param node: The sentence.
+    :param probs: A dictionary mapping variable names to probabilities.
+    :param k: The name of the variable to check relative to.
+
+    :return: A tuple of two floats (probability, gradient).
+    """
     # General ×
     # Neutral +
     # Non-idempotent +
@@ -138,6 +172,25 @@ def reduce(
         mul_neut: T,
         labeling: t.Callable[[Var], T],
 ) -> NNF:
+    """Execute AMC reduction on a sentence.
+
+    In AMC reduction, the ⊕ operator must be ``max`` on some total order,
+    and the branches of the sentence that don't contribute to the maximum
+    value are removed. This leaves a simpler sentence with only the models
+    with a maximum value.
+
+    :param node: The sentence.
+    :param add_key: A function given to ``max``'s ``key`` argument to
+                    determine the total order of the ⊕ operator.
+    :param mul: See :func:`eval`.
+    :param add_neut: See :func:`eval`.
+    :param mul_neut: See :func:`eval`.
+    :param labeling: See :func:`eval`.
+
+    :return: The transformed sentence.
+    """
+    # TODO: memoize
+    # TODO: give add_key a sensible default
     def add(a: T, b: T) -> T:
         return max((a, b), key=add_key)
 
@@ -161,6 +214,11 @@ def reduce(
 
 
 def maxplus_reduce(node: NNF, labels: t.Dict[Var, float]) -> NNF:
+    """Execute AMC reduction using the maxplus algebra.
+
+    :param node: The sentence.
+    :param labels: A dictionary mapping variable nodes to numbers.
+    """
     def labeling(v: Var) -> float:
         return labels[v]
     return reduce(node, lambda n: n, operator.add, -math.inf, 0, labeling)
