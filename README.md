@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/blyxxyz/python-nnf.svg?branch=master)](https://travis-ci.org/blyxxyz/python-nnf)
+[![Readthedocs](https://readthedocs.org/projects/python-nnf/badge/)](https://python-nnf.readthedocs.io)
 
 `nnf` is a Python package for creating and manipulating logical sentences
 written in the
@@ -44,6 +45,8 @@ a
 
 This package takes much of its data model and terminology from
 [*A Knowledge Compilation Map*](https://jair.org/index.php/jair/article/view/10311).
+
+Complete documentation can be found at [readthedocs](https://python-nnf.readthedocs.io).
 
 # Installing
 
