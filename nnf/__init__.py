@@ -265,12 +265,18 @@ class NNF:
         Much faster on sentences that are deterministic or decomposable or
         both.
 
+        The algorithm for deterministic sentences works on non-deterministic
+        sentences, but may be much slower for such sentences. Using
+        ``deterministic=True`` for sentences that aren't deterministic can
+        be a reasonable decision.
+
         :param decomposable: Whether to assume the sentence is
                              decomposable. If ``None`` (the default),
                              the sentence is automatically checked.
         :param deterministic: Indicate whether the sentence is
                               deterministic. Set this to ``True`` if you
-                              know it to be deterministic.
+                              know it to be deterministic, or want it to be
+                              treated as deterministic.
         """
         if decomposable is None:
             decomposable = self.decomposable()
@@ -579,7 +585,7 @@ class NNF:
     ) -> t.Iterator[Model]:
         """Model enumeration for deterministic sentences.
 
-        Slightly faster for decomposable sentences.
+        Slightly faster for sentences that are also decomposable.
         """
         ModelInt = t.FrozenSet[t.Tuple[Name, bool]]
 

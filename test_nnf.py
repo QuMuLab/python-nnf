@@ -424,12 +424,15 @@ def test_smoothing(sentence: nnf.NNF):
         assert sentence.make_smooth() == sentence
 
 
-def test_uf20_models():
-    def hashable_dict(model):
-        return frozenset(model.items())
+def hashable_dict(model):
+    return frozenset(model.items())
 
-    def model_set(model_gen):
-        return frozenset(map(hashable_dict, model_gen))
+
+def model_set(model_gen):
+    return frozenset(map(hashable_dict, model_gen))
+
+
+def test_uf20_models():
 
     for sentence in uf20:
         assert sentence.decomposable()
@@ -441,3 +444,15 @@ def test_uf20_models():
                                                    decomposable=False))
         assert models == model_set(sentence.models(deterministic=True,
                                                    decomposable=True))
+
+
+@given(NNF())
+def test_deterministic_models_always_works(sentence: nnf.NNF):
+    if sentence.deterministic():
+        event("Sentence is deterministic")
+    else:
+        event("Sentence is not deterministic")
+    with_det = list(sentence.models(deterministic=True))
+    no_det = list(sentence.models(deterministic=False))
+    assert len(with_det) == len(no_det)
+    assert model_set(with_det) == model_set(no_det)
