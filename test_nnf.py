@@ -390,3 +390,27 @@ def test_contradicts(a: nnf.NNF, b: nnf.NNF, contradictory: bool):
 @given(NNF())
 def test_false_contradicts_everything(sentence: nnf.NNF):
     assert nnf.false.contradicts(sentence)
+
+
+@given(DNNF())
+def test_equivalent(sentence: nnf.NNF):
+    assert sentence.equivalent(sentence)
+    assert sentence.equivalent(sentence | nnf.false)
+    assert not sentence.equivalent(sentence & nnf.Var('A'))
+    if sentence.satisfiable():
+        assert not sentence.equivalent(sentence & nnf.false)
+    else:
+        assert sentence.equivalent(sentence & nnf.false)
+
+
+@given(NNF())
+def test_smoothing(sentence: nnf.NNF):
+    if not sentence.smooth():
+        event("Sentence not smooth yet")
+        smoothed = sentence.make_smooth()
+        assert smoothed.smooth()
+        assert sentence.equivalent(smoothed)
+        assert smoothed.make_smooth() == smoothed
+    else:
+        event("Sentence already smooth")
+        assert sentence.make_smooth() == sentence

@@ -296,6 +296,35 @@ class NNF:
                 return False
         return True
 
+    def equivalent(self, other: 'NNF') -> bool:
+        """Test whether two sentences have the same models.
+
+        If two sentences don't mention the same variables they're not
+        considered equivalent.
+
+        Warning: may be very slow. Decomposability helps.
+        """
+        if self == other:
+            return True
+        vars_a = self.vars()
+        vars_b = other.vars()
+        if vars_a != vars_b:
+            return False
+        models_a = list(self.models())
+        models_b = list(other.models())
+        if len(models_a) != len(models_b):
+            return False
+        if models_a == models_b:
+            return True
+
+        def dict_hashable(
+                model: t.Dict[Name, bool]
+        ) -> t.FrozenSet[t.Tuple[Name, bool]]:
+            return frozenset((name, model[name]) for name in vars_a)
+
+        return (set(map(dict_hashable, models_a)) ==
+                set(map(dict_hashable, models_b)))
+
     def to_MODS(self) -> 'NNF':
         """Convert the sentence to a MODS sentence."""
         return Or(And(Var(name, val)
@@ -343,6 +372,41 @@ class NNF:
                 raise TypeError(type(node))
 
         return cond(self)
+
+    def make_smooth(self) -> 'NNF':
+        """Transform the sentence into an equivalent smooth sentence."""
+        @memoize
+        def filler(name: Name) -> 'Or':
+            return Or({Var(name), Var(name, False)})
+
+        @memoize
+        def smooth(node: NNF) -> NNF:
+            new: NNF
+            if isinstance(node, And):
+                new = And(smooth(child) for child in node.children)
+            elif isinstance(node, Var):
+                return node
+            elif isinstance(node, Or):
+                names = node.vars()
+                children = {smooth(child) for child in node.children}
+                smoothed: t.Set[NNF] = set()
+                for child in children:
+                    child_names = child.vars()
+                    if len(child_names) < len(names):
+                        child = And({
+                            child, *(filler(name)
+                                     for name in names - child_names)
+                        })
+                    smoothed.add(child)
+                new = Or(smoothed)
+            else:
+                raise TypeError(node)
+
+            if new == node:
+                return node
+            return new
+
+        return smooth(self)
 
     def simplify(self) -> 'NNF':
         """Apply the following transformations to make the sentence simpler:
