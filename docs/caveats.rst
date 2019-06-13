@@ -39,11 +39,13 @@ If ``.deduplicate()`` changes the value of ``.object_count()`` a lot then the se
 
 In this case the difference is pretty small.
 
-Decomposability
----------------
+Decomposability and determinism
+-------------------------------
 
-A lot of methods are much faster to perform on sentences that are decomposable, such as model enumeration. They use a different algorithm when they detect a sentence is decomposable.
+A lot of methods are much faster to perform on sentences that are decomposable or deterministic, such as model enumeration.
 
-They have a keyword argument that can be used to skip the check for decomposability. ``decomposable=True`` will always use the algorithm for decomposable sentences, and ``decomposable=False`` will use the slower algorithm. This may save a little time when doing a lot of operations on larger sentences, where determining whether they're decomposable every time takes too long.
+Decomposability is automatically detected. However, you can skip the check if you already know whether the sentence is decomposable or not, by passing ``decomposable=True`` or ``decomposable=False`` as a keyword argument.
 
-A compiler like `DSHARP <https://bitbucket.org/haz/dsharp>`_ may be able to convert some non-decomposable sentences into equivalent decomposable sentences. The output of DSHARP can be loaded using the :mod:`nnf.dsharp` module.
+Determinism is too expensive to automatically detect, but it can give a huge speedup. If you know a sentence to be deterministic, pass ``deterministic=True`` as a keyword argument to take advantage.
+
+A compiler like `DSHARP <https://bitbucket.org/haz/dsharp>`_ may be able to convert some sentences into equivalent deterministic decomposable sentences. The output of DSHARP can be loaded using the :mod:`nnf.dsharp` module.

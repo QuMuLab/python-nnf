@@ -255,11 +255,28 @@ class NNF:
 
     consistent = satisfiable  # synonym
 
-    def models(self, decomposable: _Tristate = None) -> t.Iterator[Model]:
-        """Yield all dictionaries of values that make the sentence correct."""
+    def models(
+            self,
+            decomposable: _Tristate = None,
+            deterministic: bool = False
+    ) -> t.Iterator[Model]:
+        """Yield all dictionaries of values that make the sentence correct.
+
+        Much faster on sentences that are deterministic or decomposable or
+        both.
+
+        :param decomposable: Whether to assume the sentence is
+                             decomposable. If ``None`` (the default),
+                             the sentence is automatically checked.
+        :param deterministic: Indicate whether the sentence is
+                              deterministic. Set this to ``True`` if you
+                              know it to be deterministic.
+        """
         if decomposable is None:
             decomposable = self.decomposable()
-        if decomposable:
+        if deterministic:
+            yield from self._models_deterministic(decomposable=decomposable)
+        elif decomposable:
             yield from self._models_decomposable()
         else:
             for model in all_models(self.vars()):
@@ -556,20 +573,27 @@ class NNF:
             '}\n'
         ])
 
-    def models_smart(self) -> t.Iterator[Model]:
-        """An alternative to .models().
+    def _models_deterministic(
+            self,
+            decomposable: _Tristate = None
+    ) -> t.Iterator[Model]:
+        """Model enumeration for deterministic sentences.
 
-        Potentially much faster if there are few models, but potentially
-        much slower if there are many models.
-
-        A pathological case is `Or({Var(1), Var(2), Var(3), ...})`.
+        Slightly faster for decomposable sentences.
         """
         ModelInt = t.FrozenSet[t.Tuple[Name, bool]]
 
-        def compatible(a: ModelInt, b: ModelInt) -> bool:
-            if len(a) > len(b):
-                a, b = b, a
-            return not any((name, not value) in b for name, value in a)
+        if decomposable is None:
+            decomposable = self.decomposable()
+
+        if decomposable:
+            def compatible(a: ModelInt, b: ModelInt) -> bool:
+                return True
+        else:
+            def compatible(a: ModelInt, b: ModelInt) -> bool:
+                if len(a) > len(b):
+                    a, b = b, a
+                return not any((name, not value) in b for name, value in a)
 
         @memoize
         def extract(node: NNF) -> t.Set[ModelInt]:

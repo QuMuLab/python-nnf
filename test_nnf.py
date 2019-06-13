@@ -1,5 +1,7 @@
 import os
 
+from pathlib import Path
+
 import pytest
 
 from hypothesis import assume, event, given, strategies as st
@@ -12,6 +14,12 @@ a, b, c = Var('a'), Var('b'), Var('c')
 
 fig1a = (~a & b) | (a & ~b)
 fig1b = (~a | ~b) & (a | b)
+
+uf20 = [
+    dsharp.loads(file.read_text())
+    for file in (Path(os.path.dirname(__file__))
+                 / 'testdata' / 'satlib' / 'uf20').glob('*.nnf')
+]
 
 
 def test_all_models_basic():
@@ -351,7 +359,7 @@ def test_to_model(model: dict):
 @given(NNF())
 def test_models_smart_equivalence(sentence: nnf.NNF):
     dumb = list(sentence.models())
-    smart = list(sentence.models_smart())
+    smart = list(sentence._models_deterministic())
     assert len(dumb) == len(smart)
     assert all(sentence.satisfied_by(model) for model in smart)
 
@@ -414,3 +422,22 @@ def test_smoothing(sentence: nnf.NNF):
     else:
         event("Sentence already smooth")
         assert sentence.make_smooth() == sentence
+
+
+def test_uf20_models():
+    def hashable_dict(model):
+        return frozenset(model.items())
+
+    def model_set(model_gen):
+        return frozenset(map(hashable_dict, model_gen))
+
+    for sentence in uf20:
+        assert sentence.decomposable()
+        m = list(sentence.models(deterministic=False,
+                                 decomposable=True))
+        models = model_set(m)
+        assert len(m) == len(models)
+        assert models == model_set(sentence.models(deterministic=True,
+                                                   decomposable=False))
+        assert models == model_set(sentence.models(deterministic=True,
+                                                   decomposable=True))
