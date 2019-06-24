@@ -431,7 +431,7 @@ class NNF:
 
         return smooth(self)
 
-    def simplify(self) -> 'NNF':
+    def simplify(self, merge_nodes: bool = True) -> 'NNF':
         """Apply the following transformations to make the sentence simpler:
 
         - If an And node has `false` as a child, replace it by `false`
@@ -440,6 +440,10 @@ class NNF:
         - Remove children of Or nodes that are `false`
         - If an And or Or node only has one child, replace it by that child
         - If an And or Or node has a child of the same type, merge them
+
+        :param merge_nodes: if ``False``, don't merge internal nodes. In
+                            certain cases, merging them may increase the
+                            size of the sentence.
         """
         # TODO: which properties does this preserve?
 
@@ -454,7 +458,7 @@ class NNF:
                         return true
                     elif child == false:
                         pass
-                    elif isinstance(child, Or):
+                    elif isinstance(child, Or) and merge_nodes:
                         new_children.update(child.children)
                     else:
                         new_children.add(child)
@@ -469,7 +473,7 @@ class NNF:
                         return false
                     elif child == true:
                         pass
-                    elif isinstance(child, And):
+                    elif isinstance(child, And) and merge_nodes:
                         new_children.update(child.children)
                     else:
                         new_children.add(child)

@@ -164,15 +164,20 @@ def test_MODS_satisfiable(sentence: nnf.Or):
     assert sentence.satisfiable()
 
 
-@given(DNNF())
-def test_DNNF_sat_strategies(sentence: nnf.NNF):
+@pytest.fixture(scope='module', params=[True, False])
+def merge_nodes(request):
+    return request.param
+
+
+@given(sentence=DNNF())
+def test_DNNF_sat_strategies(sentence: nnf.NNF, merge_nodes):
     sat = sentence.satisfiable()
     if sat:
-        assert sentence.simplify() != nnf.false
+        assert sentence.simplify(merge_nodes) != nnf.false
         assert amc.SAT(sentence)
         event("Sentence satisfiable")
     else:
-        assert sentence.simplify() == nnf.false
+        assert sentence.simplify(merge_nodes) == nnf.false
         assert not amc.SAT(sentence)
         event("Sentence not satisfiable")
 
@@ -184,32 +189,32 @@ def test_amc_numsat(sentence: nnf.NNF):
     assert amc.NUM_SAT(sentence) == len(list(sentence.models()))
 
 
-@given(NNF())
-def test_idempotent_simplification(sentence: nnf.NNF):
-    sentence = sentence.simplify()
-    assert sentence.simplify() == sentence
+@given(sentence=NNF())
+def test_idempotent_simplification(sentence: nnf.NNF, merge_nodes):
+    sentence = sentence.simplify(merge_nodes)
+    assert sentence.simplify(merge_nodes) == sentence
 
 
-@given(NNF())
-def test_simplify_preserves_meaning(sentence: nnf.NNF):
-    simple = sentence.simplify()
+@given(sentence=NNF())
+def test_simplify_preserves_meaning(sentence: nnf.NNF, merge_nodes):
+    simple = sentence.simplify(merge_nodes)
     for model in sentence.models():
         assert simple.satisfied_by(model)
     for model in simple.models():
-        assert sentence.condition(model).simplify() == nnf.true
+        assert sentence.condition(model).simplify(merge_nodes) == nnf.true
 
 
-@given(NNF())
-def test_simplify_eliminates_bools(sentence: nnf.NNF):
+@given(sentence=NNF())
+def test_simplify_eliminates_bools(sentence: nnf.NNF, merge_nodes):
     assume(sentence != nnf.true and sentence != nnf.false)
     if any(node == nnf.true or node == nnf.false
            for node in sentence.walk()):
         event("Sentence contained booleans originally")
-    sentence = sentence.simplify()
+    sentence = sentence.simplify(merge_nodes)
     if sentence == nnf.true or sentence == nnf.false:
         event("Sentence simplified to boolean")
     else:
-        for node in sentence.simplify().walk():
+        for node in sentence.walk():
             assert node != nnf.true and node != nnf.false
 
 
@@ -227,14 +232,14 @@ def test_simplify_merges_internal_nodes(sentence: nnf.NNF):
                 assert type(node) != type(child)
 
 
-@given(DNNF())
-def test_simplify_solves_DNNF_satisfiability(sentence: nnf.NNF):
+@given(sentence=DNNF())
+def test_simplify_solves_DNNF_satisfiability(sentence: nnf.NNF, merge_nodes):
     if sentence.satisfiable():
         event("Sentence is satisfiable")
-        assert sentence.simplify() != nnf.false
+        assert sentence.simplify(merge_nodes) != nnf.false
     else:
         event("Sentence is not satisfiable")
-        assert sentence.simplify() == nnf.false
+        assert sentence.simplify(merge_nodes) == nnf.false
 
 
 def test_dimacs_sat_serialize():
