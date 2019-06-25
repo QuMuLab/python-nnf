@@ -12,11 +12,13 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+import abc
 import functools
 import itertools
 import typing as t
 
-import nnf
+if t.TYPE_CHECKING:
+    import nnf
 
 Name = t.Hashable
 Model = t.Dict[Name, bool]
@@ -46,7 +48,7 @@ T = t.TypeVar('T')
 _Tristate = t.Optional[bool]
 
 
-class NNF:
+class NNF(metaclass=abc.ABCMeta):
     """Base class for all NNF sentences."""
 
     def __and__(self, other: 'NNF') -> 'NNF':
@@ -169,9 +171,10 @@ class NNF:
                             return False
         return True
 
+    @abc.abstractmethod
     def decision_node(self) -> bool:
         """The sentence is a valid binary decision diagram (BDD)."""
-        return False
+        ...
 
     def satisfied_by(self, model: Model) -> bool:
         """The given dictionary of values makes the sentence correct."""
@@ -674,6 +677,7 @@ class NNF:
         for leaf, path in leaves(model_tree):
             yield dict(zip(names, path))
 
+    @abc.abstractmethod
     def _sorting_key(self) -> t.Tuple[t.Any, ...]:
         """Used for sorting nodes in a (mostly) consistent order.
 
@@ -688,7 +692,7 @@ class NNF:
 
         Note that Var(10) and Var("10") are sorted as equal.
         """
-        raise NotImplementedError
+        ...
 
     def __lt__(self, other: object) -> bool:
         if not isinstance(other, NNF):
@@ -768,6 +772,9 @@ class Var(NNF):
     def __invert__(self) -> 'Var':
         return Var(self.name, not self.true)
 
+    def decision_node(self) -> bool:
+        return False
+
     def _sorting_key(self) -> t.Tuple[bool, str, bool]:
         return False, str(self.name), not self.true
 
@@ -775,8 +782,6 @@ class Var(NNF):
 class Internal(NNF):
     """Base class for internal nodes, i.e. And and Or nodes."""
     children: t.FrozenSet[NNF]
-
-    __slots__ = ()
 
     def __init__(self, children: t.Iterable[NNF] = ()) -> None:
         # needed because of immutability
@@ -827,6 +832,8 @@ class Internal(NNF):
 
 class And(Internal):
     """Conjunction nodes, which are only true if all of their children are."""
+    __slots__ = ('children',)
+
     def decision_node(self) -> bool:
         if not self.children:
             return True
@@ -840,6 +847,8 @@ class And(Internal):
 
 class Or(Internal):
     """Disjunction nodes, which are true if any of their children are."""
+    __slots__ = ('children',)
+
     def decision_node(self) -> bool:
         if not self.children:
             return True  # boolean
@@ -932,14 +941,14 @@ class Builder:
         self.true = true
         self.false = false
 
-    def Var(self, name: Name, true: bool = True) -> nnf.Var:
+    def Var(self, name: Name, true: bool = True) -> 'nnf.Var':
         ret = Var(name, true)
         return self.stored.setdefault(ret, ret)  # type: ignore
 
-    def And(self, children: t.Iterable[NNF] = ()) -> nnf.And:
+    def And(self, children: t.Iterable[NNF] = ()) -> 'nnf.And':
         ret = And(children)
         return self.stored.setdefault(ret, ret)  # type: ignore
 
-    def Or(self, children: t.Iterable[NNF] = ()) -> nnf.Or:
+    def Or(self, children: t.Iterable[NNF] = ()) -> 'nnf.Or':
         ret = Or(children)
         return self.stored.setdefault(ret, ret)  # type: ignore

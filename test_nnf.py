@@ -461,3 +461,12 @@ def test_deterministic_models_always_works(sentence: nnf.NNF):
     no_det = list(sentence.models(deterministic=False))
     assert len(with_det) == len(no_det)
     assert model_set(with_det) == model_set(no_det)
+
+
+def test_instantiating_base_classes_fails():
+    with pytest.raises(TypeError):
+        nnf.NNF()
+    with pytest.raises(TypeError):
+        nnf.Internal()
+    with pytest.raises(TypeError):
+        nnf.Internal({nnf.Var(3)})
