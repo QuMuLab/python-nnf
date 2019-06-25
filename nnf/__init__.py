@@ -29,7 +29,7 @@ __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Builder', 'all_models',
            'decision', 'true', 'false', 'dsharp', 'dimacs', 'amc')
 
 
-def all_models(names: t.Collection[Name]) -> t.Iterator[Model]:
+def all_models(names: 't.Collection[Name]') -> t.Iterator[Model]:
     """Yield dictionaries with all possible boolean values for the names.
 
     >>> list(all_models(["a", "b"]))
@@ -138,7 +138,7 @@ class NNF(metaclass=abc.ABCMeta):
 
         for node in self.walk():
             if isinstance(node, And):
-                seen: t.Set[Name] = set()
+                seen = set()  # type: t.Set[Name]
                 for child in node.children:
                     for name in var(child):
                         if name in seen:
@@ -368,7 +368,7 @@ class NNF(metaclass=abc.ABCMeta):
         if not isinstance(self, And):
             raise TypeError("A sentence can only be converted to a model if "
                             "it's a conjunction of variables.")
-        model: Model = {}
+        model = {}  # type: Model
         for child in self.children:
             if not isinstance(child, Var):
                 raise TypeError("A sentence can only be converted to a "
@@ -407,15 +407,15 @@ class NNF(metaclass=abc.ABCMeta):
 
         @memoize
         def smooth(node: NNF) -> NNF:
-            new: NNF
             if isinstance(node, And):
-                new = And(smooth(child) for child in node.children)
+                new = And(smooth(child)
+                          for child in node.children)  # type: NNF
             elif isinstance(node, Var):
                 return node
             elif isinstance(node, Or):
                 names = node.vars()
                 children = {smooth(child) for child in node.children}
-                smoothed: t.Set[NNF] = set()
+                smoothed = set()  # type: t.Set[NNF]
                 for child in children:
                     child_names = child.vars()
                     if len(child_names) < len(names):
@@ -454,7 +454,7 @@ class NNF(metaclass=abc.ABCMeta):
         def simple(node: NNF) -> NNF:
             if isinstance(node, Var):
                 return node
-            new_children: t.Set[NNF] = set()
+            new_children = set()  # type: t.Set[NNF]
             if isinstance(node, Or):
                 for child in map(simple, node.children):
                     if child == true:
@@ -500,7 +500,7 @@ class NNF(metaclass=abc.ABCMeta):
         In a lot of cases it's better to avoid the duplication in the first
         place, for example with a Builder object.
         """
-        new_nodes: t.Dict[NNF, NNF] = {}
+        new_nodes = {}  # type: t.Dict[NNF, NNF]
 
         def recreate(node: NNF) -> NNF:
             if node not in new_nodes:
@@ -518,7 +518,7 @@ class NNF(metaclass=abc.ABCMeta):
 
     def object_count(self) -> int:
         """Return the number of distinct node objects in the sentence."""
-        ids: t.Set[int] = set()
+        ids = set()  # type: t.Set[int]
 
         def count(node: NNF) -> None:
             ids.add(id(node))
@@ -540,8 +540,8 @@ class NNF(metaclass=abc.ABCMeta):
         #       - add own directives
         #       - set different palette
         counter = itertools.count()
-        names: t.Dict[NNF, t.Tuple[int, str, str]] = {}
-        arrows: t.List[t.Tuple[int, int]] = []
+        names = {}  # type: t.Dict[NNF, t.Tuple[int, str, str]]
+        arrows = []  # type: t.List[t.Tuple[int, int]]
 
         def name(node: NNF) -> int:
             if node not in names:
@@ -617,7 +617,7 @@ class NNF(metaclass=abc.ABCMeta):
                         for child in node.children
                         for model in extract(child)}
             elif isinstance(node, And):
-                models: t.Set[ModelInt] = {frozenset()}
+                models = {frozenset()}  # type: t.Set[ModelInt]
                 for child in node.children:
                     models = {existing | new
                               for new in extract(child)
@@ -627,7 +627,7 @@ class NNF(metaclass=abc.ABCMeta):
             raise TypeError(node)
 
         names = self.vars()
-        full_models: t.Set[ModelInt] = set()
+        full_models = set()  # type: t.Set[ModelInt]
 
         def complete(
                 model: ModelInt,
@@ -651,7 +651,7 @@ class NNF(metaclass=abc.ABCMeta):
         if not self.satisfiable(decomposable=True):
             return
         names = tuple(self.vars())
-        model_tree: t.Dict[bool, t.Any] = {}
+        model_tree = {}  # type: t.Dict[bool, t.Any]
 
         def leaves(
                 tree: t.Dict[bool, t.Any],
@@ -739,14 +739,18 @@ class Var(NNF):
                 negated.
     """
 
-    name: Name
-    true: bool
-
     __slots__ = ('name', 'true')
 
-    def __init__(self, name: Name, true: bool = True) -> None:
-        object.__setattr__(self, 'name', name)
-        object.__setattr__(self, 'true', true)
+    if t.TYPE_CHECKING:
+        def __init__(self, name: Name, true: bool = True) -> None:
+            # For the typechecker
+            self.name = name
+            self.true = true
+    else:
+        def __init__(self, name: Name, true: bool = True) -> None:
+            # For immutability
+            object.__setattr__(self, 'name', name)
+            object.__setattr__(self, 'true', true)
 
     def __eq__(self, other: t.Any) -> t.Any:
         if self.__class__ is other.__class__:
@@ -781,11 +785,14 @@ class Var(NNF):
 
 class Internal(NNF):
     """Base class for internal nodes, i.e. And and Or nodes."""
-    children: t.FrozenSet[NNF]
-
-    def __init__(self, children: t.Iterable[NNF] = ()) -> None:
-        # needed because of immutability
-        object.__setattr__(self, 'children', frozenset(children))
+    if t.TYPE_CHECKING:
+        def __init__(self, children: t.Iterable[NNF] = ()) -> None:
+            # For the typechecker
+            self.children = frozenset(children)
+    else:
+        def __init__(self, children: t.Iterable[NNF] = ()) -> None:
+            # For immutability
+            object.__setattr__(self, 'children', frozenset(children))
 
     def __eq__(self, other: t.Any) -> t.Any:
         if self.__class__ is other.__class__:
@@ -815,7 +822,7 @@ class Internal(NNF):
 
     def _is_simple(self) -> bool:
         """Whether all children are leaves that don't share variables."""
-        variables: t.Set[Name] = set()
+        variables = set()  # type: t.Set[Name]
         for child in self.children:
             if not child.leaf():
                 return False
@@ -935,7 +942,7 @@ class Builder:
     # TODO: deduplicate vars that are negated using the operator
     def __init__(self, seed: t.Iterable[NNF] = ()):
         """:param seed: Nodes to store for reuse in advance."""
-        self.stored: t.Dict[NNF, NNF] = {true: true, false: false}
+        self.stored = {true: true, false: false}  # type: t.Dict[NNF, NNF]
         for node in seed:
             self.stored[node] = node
         self.true = true

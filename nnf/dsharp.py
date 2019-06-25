@@ -18,7 +18,7 @@ def load(fp: t.TextIO) -> NNF:
     fmt, nodecount, edges, varcount = fp.readline().split()
     node_specs = dict(enumerate(line.split() for line in fp))
     assert fmt == 'nnf'
-    nodes: t.Dict[int, NNF] = {}
+    nodes = {}  # type: t.Dict[int, NNF]
     for num, spec in node_specs.items():
         if spec[0] == 'L':
             if spec[1].startswith('-'):

@@ -4,11 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from hypothesis import assume, event, given, strategies as st
+from hypothesis import (assume, event, given, strategies as st, settings,
+                        HealthCheck)
 
 import nnf
 
 from nnf import Var, And, Or, amc, dimacs, dsharp
+
+settings.register_profile('patient', deadline=500)
+settings.load_profile('patient')
 
 a, b, c = Var('a'), Var('b'), Var('c')
 
@@ -169,6 +173,7 @@ def merge_nodes(request):
     return request.param
 
 
+@settings(suppress_health_check=(HealthCheck.too_slow,))
 @given(sentence=DNNF())
 def test_DNNF_sat_strategies(sentence: nnf.NNF, merge_nodes):
     sat = sentence.satisfiable()
@@ -365,8 +370,7 @@ def test_to_model(model: dict):
 def test_models_smart_equivalence(sentence: nnf.NNF):
     dumb = list(sentence.models())
     smart = list(sentence._models_deterministic())
-    assert len(dumb) == len(smart)
-    assert all(sentence.satisfied_by(model) for model in smart)
+    assert model_set(dumb) == model_set(smart)
 
 
 @pytest.mark.parametrize(

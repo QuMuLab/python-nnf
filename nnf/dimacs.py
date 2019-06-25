@@ -37,17 +37,19 @@ def dump(
     :param mode: Either ``'sat'`` to dump in the general SAT format,
                  or ``'cnf'`` to dump in the specialized CNF format.
     """
-    num_vars: int
     if num_variables is None:
         if var_labels is None:
-            names: t.FrozenSet[int] = obj.vars()  # type: ignore
+            if t.TYPE_CHECKING:
+                names = frozenset()  # type: t.FrozenSet[int]
+            else:
+                names = obj.vars()
             for name in names:
                 if not isinstance(name, int) or name <= 0:
                     raise TypeError(
                         f"{name!r} is not an integer > 0. Try supplying a "
                         "var_labels dictionary."
                     )
-            num_vars = max(names, default=0)
+            num_vars = max(names, default=0)  # type: int
         else:
             num_vars = max(var_labels.values(), default=0)
     else:
@@ -94,7 +96,7 @@ def _dump_sat(
         *,
         num_variables: int,
         var_labels: t.Optional[t.Dict[Name, int]] = None,
-        comment_header: t.Optional[str] = None,
+        comment_header: t.Optional[str] = None
 ) -> None:
     if comment_header is not None:
         _write_comments(comment_header, fp)
@@ -128,7 +130,7 @@ def _dump_cnf(
         *,
         num_variables: int,
         var_labels: t.Optional[t.Dict[Name, int]] = None,
-        comment_header: t.Optional[str] = None,
+        comment_header: t.Optional[str] = None
 ) -> None:
     if not isinstance(obj, And):
         raise TypeError("CNF sentences must be conjunctions")
@@ -213,7 +215,7 @@ def loads(s: str) -> NNF:
 
 
 def _load_sat(fp: t.TextIO) -> NNF:
-    tokens: t.Deque[str] = collections.deque()
+    tokens = collections.deque()  # type: t.Deque[str]
     for line in fp:
         if line.startswith('c'):
             continue
@@ -231,7 +233,7 @@ def _load_sat(fp: t.TextIO) -> NNF:
     return result
 
 
-def _parse_sat(tokens: t.Deque[str]) -> NNF:
+def _parse_sat(tokens: 't.Deque[str]') -> NNF:
     cur = tokens.popleft()
     if cur == '(':
         content = _parse_sat(tokens)
@@ -269,7 +271,7 @@ def _parse_sat(tokens: t.Deque[str]) -> NNF:
 
 
 def _load_cnf(fp: t.TextIO) -> NNF:
-    tokens: t.Deque[str] = collections.deque()
+    tokens = []  # type: t.List[str]
     for line in fp:
         if line.startswith('c'):
             continue
@@ -280,9 +282,9 @@ def _load_cnf(fp: t.TextIO) -> NNF:
     return _parse_cnf(tokens)
 
 
-def _parse_cnf(tokens: t.Deque[str]) -> NNF:
-    clauses: t.Set[Or] = set()
-    clause: t.Set[Var] = set()
+def _parse_cnf(tokens: t.Iterable[str]) -> NNF:
+    clauses = set()  # type: t.Set[Or]
+    clause = set()  # type: t.Set[Var]
     for token in tokens:
         if token == '0':
             if clause:

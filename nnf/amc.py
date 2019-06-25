@@ -196,7 +196,7 @@ def reduce(
 
     if isinstance(node, Or):
         best = add_neut
-        candidates: t.List[NNF] = []
+        candidates = []  # type: t.List[NNF]
         for child in node.children:
             value = eval(child, add, mul, add_neut, mul_neut, labeling)
             if value > best:  # type: ignore
