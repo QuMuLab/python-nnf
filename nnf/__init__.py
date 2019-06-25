@@ -50,6 +50,7 @@ _Tristate = t.Optional[bool]
 
 class NNF(metaclass=abc.ABCMeta):
     """Base class for all NNF sentences."""
+    __slots__ = ()
 
     def __and__(self, other: 'NNF') -> 'NNF':
         """And({self, other})"""
@@ -785,6 +786,8 @@ class Var(NNF):
 
 class Internal(NNF):
     """Base class for internal nodes, i.e. And and Or nodes."""
+    __slots__ = ('children',)
+
     if t.TYPE_CHECKING:
         def __init__(self, children: t.Iterable[NNF] = ()) -> None:
             # For the typechecker
@@ -839,7 +842,7 @@ class Internal(NNF):
 
 class And(Internal):
     """Conjunction nodes, which are only true if all of their children are."""
-    __slots__ = ('children',)
+    __slots__ = ()
 
     def decision_node(self) -> bool:
         if not self.children:
@@ -854,7 +857,7 @@ class And(Internal):
 
 class Or(Internal):
     """Disjunction nodes, which are true if any of their children are."""
-    __slots__ = ('children',)
+    __slots__ = ()
 
     def decision_node(self) -> bool:
         if not self.children:
