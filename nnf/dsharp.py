@@ -30,7 +30,7 @@ def load(fp: t.TextIO) -> NNF:
         elif spec[0] == 'O':
             nodes[num] = Or(nodes[int(n)] for n in spec[3:])
         else:
-            raise ValueError(f"Can't parse line {num}: {spec}")
+            raise ValueError("Can't parse line {}: {}".format(num, spec))
     return nodes[int(nodecount) - 1]
 
 

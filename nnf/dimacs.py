@@ -46,8 +46,8 @@ def dump(
             for name in names:
                 if not isinstance(name, int) or name <= 0:
                     raise TypeError(
-                        f"{name!r} is not an integer > 0. Try supplying a "
-                        "var_labels dictionary."
+                        "{!r} is not an integer > 0. Try supplying a "
+                        "var_labels dictionary.".format(name)
                     )
             num_vars = max(names, default=0)  # type: int
         else:
@@ -80,13 +80,13 @@ def _format_var(
     else:
         name = node.name  # type: ignore
     if not isinstance(name, int) or name <= 0:
-        raise TypeError(f"{name!r} is not an integer > 0")
+        raise TypeError("{!r} is not an integer > 0".format(name))
     if name > num_variables:
         raise ValueError(
-            f"{name!r} is more than num_variables"
+            "{!r} is more than num_variables".format(name)
         )
     if not node.true:
-        return f"-{name}"
+        return "-{}".format(name)
     return str(name)
 
 
@@ -101,7 +101,7 @@ def _dump_sat(
     if comment_header is not None:
         _write_comments(comment_header, fp)
 
-    fp.write(f"p sat {num_variables}\n")
+    fp.write("p sat {}\n".format(num_variables))
 
     def serialize(node: NNF) -> None:
         if isinstance(node, Var):
@@ -117,7 +117,7 @@ def _dump_sat(
                 serialize(child)
             fp.write(')')
         else:
-            raise TypeError(f"Can't serialize type {type(node)}")
+            raise TypeError("Can't serialize type {}".format(type(node)))
 
     fp.write('(')
     serialize(obj)
@@ -138,7 +138,7 @@ def _dump_cnf(
     if comment_header is not None:
         _write_comments(comment_header, fp)
 
-    fp.write(f"p cnf {num_variables} {len(obj.children)}\n")
+    fp.write("p cnf {} {}\n".format(num_variables, len(obj.children)))
 
     first = True
     for clause in obj.children:
@@ -197,7 +197,7 @@ def load(fp: t.TextIO) -> NNF:
                 # problem[3] has the number of clauses
                 return _load_cnf(fp)
             else:
-                raise ValueError(f"Unknown format '{fmt}'")
+                raise ValueError("Unknown format '{}'".format(fmt))
         else:
             print(repr(line))
             raise ValueError(
@@ -239,12 +239,14 @@ def _parse_sat(tokens: 't.Deque[str]') -> NNF:
         content = _parse_sat(tokens)
         close = tokens.popleft()
         if close != ')':
-            raise ValueError(f"Expected closing paren, found {close!r}")
+            raise ValueError("Expected closing paren, found {!r}"
+                             .format(close))
         return content
     elif cur == '-':
         content = _parse_sat(tokens)
         if not isinstance(content, Var):
-            raise ValueError(f"Only variables can be negated, not {content!r}")
+            raise ValueError("Only variables can be negated, not {!r}"
+                             .format(content))
         return ~content
     elif cur == '*(':
         children = []
@@ -267,7 +269,7 @@ def _parse_sat(tokens: 't.Deque[str]') -> NNF:
     elif cur.isdigit():
         return Var(int(cur))
     else:
-        raise ValueError(f"Found unexpected token {cur!r}")
+        raise ValueError("Found unexpected token {!r}".format(cur))
 
 
 def _load_cnf(fp: t.TextIO) -> NNF:

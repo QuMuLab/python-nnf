@@ -54,7 +54,7 @@ Complete documentation can be found at [readthedocs](https://python-nnf.readthed
 pip install nnf
 ```
 
-At least Python 3.6 is required.
+At least Python 3.5 is required.
 
 # Serialization
 

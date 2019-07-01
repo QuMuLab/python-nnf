@@ -12,6 +12,8 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+__version__ = '0.1.1'
+
 import abc
 import functools
 import itertools
@@ -29,7 +31,7 @@ __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Builder', 'all_models',
            'decision', 'true', 'false', 'dsharp', 'dimacs', 'amc')
 
 
-def all_models(names: 't.Collection[Name]') -> t.Iterator[Model]:
+def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
     """Yield dictionaries with all possible boolean values for the names.
 
     >>> list(all_models(["a", "b"]))
@@ -187,9 +189,8 @@ class NNF(metaclass=abc.ABCMeta):
                     # this error not to occur even if a variable is missing.
                     # In such a case including the variable with any value
                     # would not affect the return value though.
-                    raise ValueError(
-                        f"Model does not contain variable {node.name!r}"
-                    )
+                    raise ValueError("Model does not contain variable {!r}"
+                                     .format(node.name))
                 return model[node.name] == node.true
             elif isinstance(node, Or):
                 return any(sat(child) for child in node.children)
@@ -375,7 +376,8 @@ class NNF(metaclass=abc.ABCMeta):
                 raise TypeError("A sentence can only be converted to a "
                                 "model if it's a conjunction of variables.")
             if child.name in model:
-                raise ValueError(f"{child.name!r} appears multiple times.")
+                raise ValueError("{!r} appears multiple times."
+                                 .format(child.name))
             model[child.name] = child.true
 
         return model
@@ -563,7 +565,8 @@ class NNF(metaclass=abc.ABCMeta):
                 elif isinstance(node, Or):
                     names[node] = (number, "∨", 'yellow')
                 else:
-                    raise TypeError(f"Can't handle node of type {type(node)}")
+                    raise TypeError("Can't handle node of type {}"
+                                    .format(type(node)))
             return names[node][0]
 
         for node in sorted(self.walk()):
@@ -576,12 +579,13 @@ class NNF(metaclass=abc.ABCMeta):
         return '\n'.join([
             'digraph {',
             *(
-                f'    {number} [label="{label}"'
-                + (f' fillcolor="{fillcolor}" style=filled]' if color else ']')
+                '    {} [label="{}"'.format(number, label)
+                + (' fillcolor="{}" style=filled]'.format(fillcolor)
+                   if color else ']')
                 for number, label, fillcolor in names.values()
             ),
             *(
-                f'    {src} -> {dst}'
+                '    {} -> {}'.format(src, dst)
                 for src, dst in arrows
             ),
             '}\n'
@@ -762,17 +766,19 @@ class Var(NNF):
         return hash((self.name, self.true))
 
     def __setattr__(self, key: str, value: object) -> None:
-        raise TypeError(f"{self.__class__.__name__} objects are immutable")
+        raise TypeError("{} objects are immutable"
+                        .format(self.__class__.__name__))
 
     def __delattr__(self, name: str) -> None:
-        raise TypeError(f"{self.__class__.__name__} objects are immutable")
+        raise TypeError("{} objects are immutable"
+                        .format(self.__class__.__name__))
 
     def __repr__(self) -> str:
         if isinstance(self.name, str):
-            return f"{self.name}" if self.true else f"~{self.name}"
+            return str(self.name) if self.true else "~{}".format(self.name)
         else:
-            base = f"{self.__class__.__name__}({self.name!r})"
-            return base if self.true else f"~{base}"
+            base = "{}({!r})".format(self.__class__.__name__, self.name)
+            return base if self.true else '~' + base
 
     def __invert__(self) -> 'Var':
         return Var(self.name, not self.true)
@@ -806,17 +812,20 @@ class Internal(NNF):
         return hash((self.children,))
 
     def __setattr__(self, key: str, value: object) -> None:
-        raise TypeError(f"{self.__class__.__name__} objects are immutable")
+        raise TypeError("{} objects are immutable"
+                        .format(self.__class__.__name__))
 
     def __delattr__(self, name: str) -> None:
-        raise TypeError(f"{self.__class__.__name__} objects are immutable")
+        raise TypeError("{} objects are immutable"
+                        .format(self.__class__.__name__))
 
     def __repr__(self) -> str:
         if self.children:
-            return (f"{self.__class__.__name__}"
-                    f"({{{', '.join(map(repr, self.children))}}})")
+            return ("{}({{{}}})"
+                    .format(self.__class__.__name__,
+                            ', '.join(map(repr, self.children))))
         else:
-            return f"{self.__class__.__name__}()"
+            return "{}()".format(self.__class__.__name__)
 
     def leaf(self) -> bool:
         if self.children:
