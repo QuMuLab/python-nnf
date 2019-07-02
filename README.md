@@ -1,5 +1,7 @@
 [![Build Status](https://travis-ci.org/blyxxyz/python-nnf.svg?branch=master)](https://travis-ci.org/blyxxyz/python-nnf)
 [![Readthedocs](https://readthedocs.org/projects/python-nnf/badge/)](https://python-nnf.readthedocs.io)
+![Python Versions](https://img.shields.io/pypi/pyversions/nnf.svg)
+![License](https://img.shields.io/pypi/l/nnf.svg)
 
 `nnf` is a Python package for creating and manipulating logical sentences
 written in the
@@ -54,7 +56,7 @@ Complete documentation can be found at [readthedocs](https://python-nnf.readthed
 pip install nnf
 ```
 
-At least Python 3.5 is required.
+At least Python 3.4 is required.
 
 # Serialization
 

@@ -46,10 +46,11 @@ def lin(candidates):
 
     @memoize
     def C_child(i, S):
-        return builder.And({C(S | {i}),
-                            *(defeats(i, j)
-                              for j in candidates - S
-                              if i != j)})
+        children = {C(S | {i})}
+        children.update(defeats(i, j)
+                        for j in candidates - S
+                        if i != j)
+        return builder.And(children)
 
     return C(frozenset())
 

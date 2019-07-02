@@ -2,12 +2,13 @@
 `algebraic model counting <https://arxiv.org/abs/1211.4475>`_."""
 
 import functools
-import math
 import operator
 
 import typing as t
 
 from nnf import NNF, And, Var, Or, Internal, Name, true, false
+
+neg_inf = float('-inf')
 
 T = t.TypeVar('T')
 memoize = functools.lru_cache(maxsize=None)
@@ -221,4 +222,4 @@ def maxplus_reduce(node: NNF, labels: t.Dict[Var, float]) -> NNF:
     """
     def labeling(v: Var) -> float:
         return labels[v]
-    return reduce(node, lambda n: n, operator.add, -math.inf, 0, labeling)
+    return reduce(node, lambda n: n, operator.add, neg_inf, 0, labeling)

@@ -35,15 +35,19 @@ def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
     """Yield dictionaries with all possible boolean values for the names.
 
     >>> list(all_models(["a", "b"]))
-    [{'a': True, 'b': True}, {'a': False, 'b': True}, ...
+    [{'a': False, 'b': False}, {'a': False, 'b': True}, ...
     """
     if not names:
         yield {}
     else:
-        name, *rest = names
+        *rest, name = names
         for model in all_models(rest):
-            yield {name: True, **model}
-            yield {name: False, **model}
+            new = model.copy()
+            new[name] = False
+            yield new
+            new = model.copy()
+            new[name] = True
+            yield new
 
 
 T = t.TypeVar('T')
@@ -422,10 +426,10 @@ class NNF(metaclass=abc.ABCMeta):
                 for child in children:
                     child_names = child.vars()
                     if len(child_names) < len(names):
-                        child = And({
-                            child, *(filler(name)
-                                     for name in names - child_names)
-                        })
+                        child_children = {child}
+                        child_children.update(filler(name)
+                                              for name in names - child_names)
+                        child = And(child_children)
                     smoothed.add(child)
                 new = Or(smoothed)
             else:
@@ -576,20 +580,20 @@ class NNF(metaclass=abc.ABCMeta):
                 for child in sorted(node.children):
                     arrows.append((name(node), name(child)))
 
-        return '\n'.join([
-            'digraph {',
-            *(
+        return '\n'.join(
+            ['digraph {'] +
+            [
                 '    {} [label="{}"'.format(number, label)
                 + (' fillcolor="{}" style=filled]'.format(fillcolor)
                    if color else ']')
                 for number, label, fillcolor in names.values()
-            ),
-            *(
+            ] +
+            [
                 '    {} -> {}'.format(src, dst)
                 for src, dst in arrows
-            ),
-            '}\n'
-        ])
+            ] +
+            ['}\n']
+        )
 
     def _models_deterministic(
             self,

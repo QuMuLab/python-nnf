@@ -20,7 +20,7 @@ fig1a = (~a & b) | (a & ~b)
 fig1b = (~a | ~b) & (a | b)
 
 uf20 = [
-    dsharp.loads(file.read_text())
+    dsharp.loads(file.open().read())
     for file in (Path(os.path.dirname(__file__))
                  / 'testdata' / 'satlib' / 'uf20').glob('*.nnf')
 ]
@@ -28,7 +28,7 @@ uf20 = [
 
 def test_all_models_basic():
     assert list(nnf.all_models([])) == [{}]
-    assert list(nnf.all_models([1])) == [{1: True}, {1: False}]
+    assert list(nnf.all_models([1])) == [{1: False}, {1: True}]
     assert len(list(nnf.all_models(range(10)))) == 1024
 
 
