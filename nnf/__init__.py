@@ -954,8 +954,11 @@ class Builder:
 
     It's often a better idea to avoid creating nodes multiple times in the
     first place. That will save processing time as well as memory.
+
+    If you use a Builder, avoid using operators. Even negating variables
+    should be done with ``builder.Var(name, False)`` or they won't be
+    deduplicated.
     """
-    # TODO: deduplicate vars that are negated using the operator
     def __init__(self, seed: t.Iterable[NNF] = ()):
         """:param seed: Nodes to store for reuse in advance."""
         self.stored = {true: true, false: false}  # type: t.Dict[NNF, NNF]

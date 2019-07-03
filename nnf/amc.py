@@ -167,7 +167,7 @@ def MPE(node: NNF, probs: t.Dict[Name, float]) -> float:
 
 def reduce(
         node: NNF,
-        add_key: t.Callable[[T], t.Any],
+        add_key: t.Optional[t.Callable[[T], t.Any]],
         mul: t.Callable[[T, T], T],
         add_neut: T,
         mul_neut: T,
@@ -182,7 +182,8 @@ def reduce(
 
     :param node: The sentence.
     :param add_key: A function given to ``max``'s ``key`` argument to
-                    determine the total order of the ⊕ operator.
+                    determine the total order of the ⊕ operator. Pass
+                    ``None`` to use the default ordering.
     :param mul: See :func:`eval`.
     :param add_neut: See :func:`eval`.
     :param mul_neut: See :func:`eval`.
@@ -190,28 +191,38 @@ def reduce(
 
     :return: The transformed sentence.
     """
-    # TODO: memoize
-    # TODO: give add_key a sensible default
-    def add(a: T, b: T) -> T:
-        return max((a, b), key=add_key)
-
-    if isinstance(node, Or):
-        best = add_neut
-        candidates = []  # type: t.List[NNF]
-        for child in node.children:
-            value = eval(child, add, mul, add_neut, mul_neut, labeling)
-            if value > best:  # type: ignore
-                best = value
-                candidates = [child]
-            elif value == best:
-                candidates.append(child)
-        return Or(reduce(candidate, add_key, mul, add_neut, mul_neut, labeling)
-                  for candidate in candidates)
-    elif isinstance(node, And):
-        return And(reduce(child, add_key, mul, add_neut, mul_neut, labeling)
-                   for child in node.children)
+    if add_key is not None:
+        add_key_ = add_key
     else:
-        return node
+        def add_key_(n: T) -> t.Any:
+            return n
+
+    def add(a: T, b: T) -> T:
+        return max((a, b), key=add_key_)
+
+    @memoize
+    def eval_(node: NNF) -> T:
+        return eval(node, add, mul, add_neut, mul_neut, labeling)
+
+    @memoize
+    def reduce_(node: NNF) -> NNF:
+        if isinstance(node, Or):
+            best = add_neut
+            candidates = []  # type: t.List[NNF]
+            for child in node.children:
+                value = eval_(child)
+                if value > best:  # type: ignore
+                    best = value
+                    candidates = [child]
+                elif value == best:
+                    candidates.append(child)
+            return Or(reduce_(candidate) for candidate in candidates)
+        elif isinstance(node, And):
+            return And(reduce_(child) for child in node.children)
+        else:
+            return node
+
+    return reduce_(node)
 
 
 def maxplus_reduce(node: NNF, labels: t.Dict[Var, float]) -> NNF:
@@ -222,4 +233,4 @@ def maxplus_reduce(node: NNF, labels: t.Dict[Var, float]) -> NNF:
     """
     def labeling(v: Var) -> float:
         return labels[v]
-    return reduce(node, lambda n: n, operator.add, neg_inf, 0, labeling)
+    return reduce(node, None, operator.add, neg_inf, 0, labeling)
