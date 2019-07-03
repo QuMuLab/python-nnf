@@ -537,15 +537,67 @@ class NNF(metaclass=abc.ABCMeta):
         count(self)
         return len(ids)
 
-    def to_DOT(self, color: bool = False) -> str:
+    def to_DOT(
+            self,
+            *,
+            color: bool = False,
+            color_dict: t.Optional[t.Dict[str, str]] = None,
+            label: str = 'text',
+            label_dict: t.Optional[t.Dict[str, str]] = None
+    ) -> str:
         """Return a representation of the sentence in the DOT language.
 
         `DOT <https://en.wikipedia.org/wiki/DOT_(graph_description_language)>`_
         is a graph visualization language.
+
+        :param color: If ``True``, color the nodes. This is a bit of an
+                      eyesore, but might make them easier to understand.
+        :param label: If ``'text'``, the default, label nodes with "AND",
+                      "OR", etcetera. If ``'symbol'``, label them with
+                      unicode symbols like "\u2227" and "\u22a5".
+        :param color_dict: Use an alternative palette. This should be a
+                           dictionary with keys ``'and'``, ``'or'``,
+                           ``'true'``, ``'false'``, ``'var'`` and ``'neg'``.
+                           Not all keys have to be included. Passing a
+                           dictionary implies ``color=True``.
+        :param label_dict: Use alternative labels for nodes. This should be
+                           a dictionary with keys ``'and'``, ``'or'``,
+                           ``'true'`` and ``'false'``. Not all keys have to
+                           be included.
         """
-        # TODO: offer more knobs
-        #       - add own directives
-        #       - set different palette
+        colors = {
+            'and': 'lightblue',
+            'or': 'yellow',
+            'true': 'green',
+            'false': 'red',
+            'var': 'chartreuse',
+            'neg': 'pink',
+        }
+
+        if color_dict is not None:
+            color = True
+            colors.update(color_dict)
+
+        if label == 'text':
+            labels = {
+                'and': 'AND',
+                'or': 'OR',
+                'true': 'TRUE',
+                'false': 'FALSE',
+            }
+        elif label == 'symbol':
+            labels = {
+                'and': '\u2227',  # \wedge
+                'or': '\u2228',  # \vee
+                'true': '\u22a4',  # \top
+                'false': '\u22a5',  # \bot
+            }
+        else:
+            raise ValueError("Unknown label style {!r}".format(label))
+
+        if label_dict is not None:
+            labels.update(label_dict)
+
         counter = itertools.count()
         names = {}  # type: t.Dict[NNF, t.Tuple[int, str, str]]
         arrows = []  # type: t.List[t.Tuple[int, int]]
@@ -555,22 +607,24 @@ class NNF(metaclass=abc.ABCMeta):
                 number = next(counter)
                 if isinstance(node, Var):
                     label = str(node.name).replace('"', r'\"')
-                    color = 'chartreuse'
+                    color = colors['var']
                     if not node.true:
                         label = '¬' + label
-                        color = 'pink'
+                        color = colors['neg']
                     names[node] = (number, label, color)
+                    return number
                 elif node == true:
-                    names[node] = (number, "⊤", 'green')
+                    kind = 'true'
                 elif node == false:
-                    names[node] = (number, "⊥", 'red')
+                    kind = 'false'
                 elif isinstance(node, And):
-                    names[node] = (number, "∧", 'lightblue')
+                    kind = 'and'
                 elif isinstance(node, Or):
-                    names[node] = (number, "∨", 'yellow')
+                    kind = 'or'
                 else:
                     raise TypeError("Can't handle node of type {}"
                                     .format(type(node)))
+                names[node] = (number, labels[kind], colors[kind])
             return names[node][0]
 
         for node in sorted(self.walk()):
