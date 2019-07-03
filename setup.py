@@ -1,13 +1,11 @@
 import setuptools
 
-import nnf
-
 with open("README.md") as f:
     long_description = f.read()
 
 setuptools.setup(
     name="nnf",
-    version=nnf.__version__,
+    version='0.1.1',
     author="Jan Verbeek",
     author_email="jan.verbeek@posteo.nl",
     description="Manipulate NNF (Negation Normal Form) logical sentences",
