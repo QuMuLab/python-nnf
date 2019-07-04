@@ -11,6 +11,9 @@ setuptools.setup(
     description="Manipulate NNF (Negation Normal Form) logical sentences",
     url="https://github.com/blyxxyz/python-nnf",
     packages=setuptools.find_packages(),
+    package_data={
+        'nnf': ['py.typed'],  # Mark package as having inline types
+    },
     python_requires='>=3.4',
     license="ISC",
     long_description=long_description,
