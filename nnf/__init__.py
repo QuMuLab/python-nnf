@@ -357,6 +357,21 @@ class NNF(metaclass=abc.ABCMeta):
         return (set(map(dict_hashable, models_a)) ==
                 set(map(dict_hashable, models_b)))
 
+    def negate(self) -> 'NNF':
+        """Return a new sentence that's true iff the original is false."""
+        @memoize
+        def neg(node: NNF) -> NNF:
+            if isinstance(node, Var):
+                return ~node
+            elif isinstance(node, And):
+                return Or(neg(child) for child in node.children)
+            elif isinstance(node, Or):
+                return And(neg(child) for child in node.children)
+            else:
+                raise TypeError(node)
+
+        return neg(self)
+
     def to_MODS(self) -> 'NNF':
         """Convert the sentence to a MODS sentence."""
         return Or(And(Var(name, val)

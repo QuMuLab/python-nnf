@@ -474,3 +474,12 @@ def test_instantiating_base_classes_fails():
         nnf.Internal()
     with pytest.raises(TypeError):
         nnf.Internal({nnf.Var(3)})
+
+
+@given(NNF())
+def test_negation(sentence: nnf.NNF):
+    n_vars = len(sentence.vars())
+    models_orig = model_set(sentence.models())
+    models_negated = model_set(sentence.negate().models())
+    assert len(models_orig) + len(models_negated) == 2**n_vars
+    assert len(models_orig | models_negated) == 2**n_vars
