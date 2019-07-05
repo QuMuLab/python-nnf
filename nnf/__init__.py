@@ -183,6 +183,20 @@ class NNF(metaclass=abc.ABCMeta):
         """The sentence is a valid binary decision diagram (BDD)."""
         ...
 
+    def clause(self) -> bool:
+        """The sentence is a clause.
+
+        Clauses are Or nodes with leaf children that don't share variables.
+        """
+        return isinstance(self, Or) and self._is_simple()
+
+    def term(self) -> bool:
+        """The sentence is a term.
+
+        Terms are And nodes with leaf children that don't share variables.
+        """
+        return isinstance(self, And) and self._is_simple()
+
     def satisfied_by(self, model: Model) -> bool:
         """The given dictionary of values makes the sentence correct."""
         @memoize
