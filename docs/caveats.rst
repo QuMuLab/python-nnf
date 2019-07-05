@@ -49,3 +49,10 @@ Decomposability is automatically detected. However, you can skip the check if yo
 Determinism is too expensive to automatically detect, but it can give a huge speedup. If you know a sentence to be deterministic, pass ``deterministic=True`` as a keyword argument to take advantage.
 
 A compiler like `DSHARP <https://bitbucket.org/haz/dsharp>`_ may be able to convert some sentences into equivalent deterministic decomposable sentences. The output of DSHARP can be loaded using the :mod:`nnf.dsharp` module.
+
+Other duplication inefficiencies
+--------------------------------
+
+Even when properly deduplicated, the kind of sentence that's vulnerable to node duplication might still be inefficient to work with for some operations.
+
+A known offender is equality (``==``). Currently, if two of such sentences are compared that are equal but don't share any objects, it takes a very long time even both sentences don't have any duplication within themselves.
