@@ -1,6 +1,7 @@
 [![Build Status](https://travis-ci.org/blyxxyz/python-nnf.svg?branch=master)](https://travis-ci.org/blyxxyz/python-nnf)
 [![Readthedocs](https://readthedocs.org/projects/python-nnf/badge/)](https://python-nnf.readthedocs.io)
 ![Python Versions](https://img.shields.io/pypi/pyversions/nnf.svg)
+![PyPI](https://img.shields.io/pypi/v/nnf.svg)
 ![License](https://img.shields.io/pypi/l/nnf.svg)
 
 `nnf` is a Python package for creating and manipulating logical sentences
