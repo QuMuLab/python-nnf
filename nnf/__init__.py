@@ -806,6 +806,9 @@ class NNF(metaclass=abc.ABCMeta):
             return NotImplemented
         return self._sorting_key() >= other._sorting_key()
 
+    def __invert__(self) -> 'NNF':
+        return self.negate()
+
 
 class Var(NNF):
     """A variable, or its negation.
