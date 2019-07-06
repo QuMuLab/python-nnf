@@ -483,3 +483,26 @@ def test_negation(sentence: nnf.NNF):
     models_negated = model_set(sentence.negate().models())
     assert len(models_orig) + len(models_negated) == 2**n_vars
     assert len(models_orig | models_negated) == 2**n_vars
+
+
+@given(NNF())
+def test_model_counting(sentence: nnf.NNF):
+    assert sentence.model_count() == len(list(sentence.models()))
+
+
+def test_uf20_model_counting():
+    for sentence in uf20:
+        assert (sentence.model_count(deterministic=True)
+                == len(list(sentence.models())))
+
+
+@given(NNF())
+def test_validity(sentence: nnf.NNF):
+    if sentence.valid():
+        event("Valid sentence")
+        assert all(sentence.satisfied_by(model)
+                   for model in nnf.all_models(sentence.vars()))
+    else:
+        event("Invalid sentence")
+        assert any(not sentence.satisfied_by(model)
+                   for model in nnf.all_models(sentence.vars()))

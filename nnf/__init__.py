@@ -17,6 +17,7 @@ __version__ = '0.1.2'
 import abc
 import functools
 import itertools
+import operator
 import typing as t
 
 if t.TYPE_CHECKING:
@@ -278,6 +279,41 @@ class NNF(metaclass=abc.ABCMeta):
 
     consistent = satisfiable  # synonym
 
+    def valid(
+            self,
+            *,
+            decomposable: _Tristate = None,
+            deterministic: bool = False,
+            smooth: _Tristate = None
+    ) -> bool:
+        """Check whether the sentence is valid (i.e. always true).
+
+        This can be done efficiently for sentences that are decomposable and
+        deterministic.
+
+        :param decomposable: Whether to assume the sentence is decomposable.
+                             If ``None`` (the default), the sentence is
+                             automatically checked.
+        :param deterministic: Whether the sentence is deterministic. This
+                              should be set to ``True`` for sentences that
+                              are known to be deterministic. It's assumed to
+                              be ``False`` otherwise.
+        :param smooth: Whether to assume the sentence is smooth. If ``None``
+                       (the default), the sentence is automatically checked.
+        """
+        if decomposable is None:
+            decomposable = self.decomposable()
+
+        if decomposable and deterministic:
+            # mypy is unsure that 2**<int> is actually an int
+            # but len(self.vars()) >= 0, so it definitely is
+            max_num_models = 2**len(self.vars())  # type: int
+            return max_num_models == self.model_count(decomposable=True,
+                                                      deterministic=True,
+                                                      smooth=smooth)
+
+        return not self.negate().satisfiable()
+
     def models(
             self,
             decomposable: _Tristate = None,
@@ -311,6 +347,59 @@ class NNF(metaclass=abc.ABCMeta):
             for model in all_models(self.vars()):
                 if self.satisfied_by(model):
                     yield model
+
+    def model_count(
+            self,
+            *,
+            decomposable: _Tristate = None,
+            deterministic: bool = False,
+            smooth: _Tristate = None
+    ) -> int:
+        """Return the number of models the sentence has.
+
+        This can be done efficiently for sentences that are decomposable and
+        deterministic.
+
+        :param decomposable: Whether to assume the sentence is decomposable.
+                             If ``None`` (the default), the sentence is
+                             automatically checked.
+        :param deterministic: Whether the sentence is deterministic. This
+                              should be set to ``True`` for sentences that
+                              are known to be deterministic. It's assumed to
+                              be ``False`` otherwise.
+        :param smooth: Whether to assume the sentence is smooth. If the
+                       sentence isn't smooth, an extra step is needed. If
+                       ``None`` (the default), the sentence is automatically
+                       checked.
+        """
+        if decomposable is None:
+            decomposable = self.decomposable()
+        if smooth is None:
+            smooth = self.smooth()
+
+        sentence = self
+        if decomposable and deterministic and not smooth:
+            sentence = sentence.make_smooth()
+            smooth = True
+
+        if decomposable and deterministic and smooth:
+            @memoize
+            def count(node: NNF) -> int:
+                if isinstance(node, Var):
+                    return 1
+                elif isinstance(node, Or):
+                    return sum(count(child) for child in node.children)
+                elif isinstance(node, And):
+                    return functools.reduce(
+                        operator.mul,
+                        (count(child) for child in node.children)
+                    )
+                else:
+                    raise TypeError(node)
+
+            return count(sentence)
+
+        return len(list(sentence.models()))
 
     def contradicts(
             self,
