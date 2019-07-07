@@ -858,6 +858,24 @@ class NNF(metaclass=abc.ABCMeta):
         for leaf, path in leaves(model_tree):
             yield dict(zip(names, path))
 
+    def is_CNF(self) -> bool:
+        """Return whether the sentence is in the Conjunctive Normal Form."""
+        return isinstance(self, And) and all(child.clause()
+                                             for child in self.children)
+
+    def is_DNF(self) -> bool:
+        """Return whether the sentence is in the Disjunctive Normal Form."""
+        return isinstance(self, Or) and all(child.term()
+                                            for child in self.children)
+
+    def is_MODS(self) -> bool:
+        """Return whether the sentence is in MODS form.
+
+        MODS sentences are disjunctions of terms representing models,
+        making the models trivial to enumerate.
+        """
+        return self.is_DNF() and self.smooth()
+
     @abc.abstractmethod
     def _sorting_key(self) -> t.Tuple[t.Any, ...]:
         """Used for sorting nodes in a (mostly) consistent order.

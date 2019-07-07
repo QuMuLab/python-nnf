@@ -506,3 +506,34 @@ def test_validity(sentence: nnf.NNF):
         event("Invalid sentence")
         assert any(not sentence.satisfied_by(model)
                    for model in nnf.all_models(sentence.vars()))
+
+
+def test_uf20_validity():
+    for sentence in uf20:
+        assert not sentence.valid(deterministic=True)
+
+
+@given(CNF())
+def test_is_CNF(sentence: nnf.NNF):
+    assert sentence.is_CNF()
+    assert not sentence.is_DNF()
+
+
+@given(DNF())
+def test_is_DNF(sentence: nnf.NNF):
+    assert sentence.is_DNF()
+    assert not sentence.is_CNF()
+
+
+@given(NNF())
+def test_to_MODS(sentence: nnf.NNF):
+    assume(len(sentence.vars()) <= 5)
+    mods = sentence.to_MODS()
+    assert mods.is_MODS()
+    assert isinstance(mods, Or)
+    assert mods.model_count() == len(mods.children)
+
+
+@given(MODS())
+def test_is_MODS(sentence: nnf.NNF):
+    assert sentence.is_MODS()
