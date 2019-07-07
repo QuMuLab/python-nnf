@@ -121,13 +121,13 @@ class NNF(metaclass=abc.ABCMeta):
         return self.height() <= 2
 
     def simply_disjunct(self) -> bool:
-        """The children of Or nodes are leaves that don't share variables."""
+        """The children of Or nodes are variables that don't share names."""
         return all(node._is_simple()
                    for node in self.walk()
                    if isinstance(node, Or))
 
     def simply_conjunct(self) -> bool:
-        """The children of And nodes are leaves that don't share variables."""
+        """The children of And nodes are variables that don't share names."""
         return all(node._is_simple()
                    for node in self.walk()
                    if isinstance(node, And))
@@ -187,14 +187,14 @@ class NNF(metaclass=abc.ABCMeta):
     def clause(self) -> bool:
         """The sentence is a clause.
 
-        Clauses are Or nodes with leaf children that don't share variables.
+        Clauses are Or nodes with variable children that don't share names.
         """
         return isinstance(self, Or) and self._is_simple()
 
     def term(self) -> bool:
         """The sentence is a term.
 
-        Terms are And nodes with leaf children that don't share variables.
+        Terms are And nodes with variable children that don't share names.
         """
         return isinstance(self, And) and self._is_simple()
 
@@ -1012,15 +1012,14 @@ class Internal(NNF):
         return True
 
     def _is_simple(self) -> bool:
-        """Whether all children are leaves that don't share variables."""
+        """Whether all children are variables that don't share names."""
         variables = set()  # type: t.Set[Name]
         for child in self.children:
-            if not child.leaf():
+            if not isinstance(child, Var):
                 return False
-            if isinstance(child, Var):
-                if child.name in variables:
-                    return False
-                variables.add(child.name)
+            if child.name in variables:
+                return False
+            variables.add(child.name)
         return True
 
     def _sorting_key(self) -> t.Tuple[bool, int, int, str, t.List[NNF]]:
