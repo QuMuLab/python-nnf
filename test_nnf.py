@@ -32,7 +32,7 @@ def test_all_models_basic():
     assert len(list(nnf.all_models(range(10)))) == 1024
 
 
-@given(st.sets(st.integers(), max_size=10))
+@given(st.sets(st.integers(), max_size=8))
 def test_all_models(names):
     result = list(nnf.all_models(names))
     # Proper result size
@@ -67,7 +67,7 @@ def test_amc():
     assert amc.GRAD(a, {'a': 0.5}, 'a') == (0.5, 1)
 
 
-names = st.integers(1, 10)
+names = st.integers(1, 8)
 
 
 @st.composite
@@ -99,12 +99,12 @@ def clauses(draw):
 
 @st.composite
 def DNF(draw):
-    return Or(draw(st.sets(terms())))
+    return Or(draw(st.frozensets(terms())))
 
 
 @st.composite
 def CNF(draw):
-    sentence = And(draw(st.sets(clauses())))
+    sentence = And(draw(st.frozensets(clauses())))
     assume(len(sentence.children) > 0)
     return sentence
 
@@ -112,17 +112,17 @@ def CNF(draw):
 @st.composite
 def models(draw):
     return And(Var(name, draw(st.booleans()))
-               for name in range(1, 11))
+               for name in range(1, 9))
 
 
 @st.composite
 def MODS(draw):
-    return Or(draw(st.sets(models())))
+    return Or(draw(st.frozensets(models())))
 
 
 @st.composite
 def internal(draw, children):
-    return draw(st.sampled_from((And, Or)))(draw(st.sets(children)))
+    return draw(st.sampled_from((And, Or)))(draw(st.frozensets(children)))
 
 
 @st.composite
@@ -137,21 +137,12 @@ def DNNF(draw):
     return sentence
 
 
-@st.composite
-def sd_DNNF(draw):
-    sentence = draw(NNF())
-    assume(sentence.decomposable())
-    assume(sentence.smooth())
-    assume(sentence.deterministic())
-    return sentence
-
-
 @given(DNF())
 def test_hyp(sentence: nnf.Or):
     assume(len(sentence.children) != 0)
     assume(sentence.decomposable())
     assert sentence.satisfiable()
-    assert sentence.vars() <= set(range(1, 11))
+    assert sentence.vars() <= set(range(1, 9))
 
 
 @given(MODS())
@@ -187,11 +178,10 @@ def test_DNNF_sat_strategies(sentence: nnf.NNF, merge_nodes):
         event("Sentence not satisfiable")
 
 
-@given(sd_DNNF())
-def test_amc_numsat(sentence: nnf.NNF):
-    if not sentence.satisfiable():
-        event("Sentence not satisfiable")
-    assert amc.NUM_SAT(sentence) == len(list(sentence.models()))
+def test_amc_numsat():
+    for sentence in uf20:
+        assert (amc.NUM_SAT(sentence.make_smooth())
+                == len(list(sentence.models())))
 
 
 @given(sentence=NNF())
