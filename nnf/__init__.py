@@ -547,6 +547,14 @@ class NNF(metaclass=abc.ABCMeta):
         Journal of Automated Reasoning 18.3 (1997): 337-356.
         """
         # todo: make it more readable instead of a direct translation
+        # todo: this algorithm doesn't seem to actually work
+        #  for example:
+        #  >>> s = Or({~Var(1), And({~Var(2), Var(2)})})
+        #  >>> s.implicates()
+        #  And({Or({~Var(1), Var(2)}), Or({~Var(2), ~Var(1)})})
+        #  >>> s.implicants().implicates()
+        #  And({Or({~Var(1)})})
+        #  The first one is incorrect
 
         Path_T = t.FrozenSet[Var]
         Paths_T = t.Set[Path_T]
