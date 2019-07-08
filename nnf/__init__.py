@@ -475,6 +475,65 @@ class NNF(metaclass=abc.ABCMeta):
 
         return neg(self)
 
+    def implicates(self) -> 'And':
+        """Extract the prime implicates of the sentence.
+
+        Prime implicates are the minimal implied clauses. This method
+        returns a conjunction of clauses that's equivalent to the original
+        sentence, and minimal, meaning that there are no clauses implied by
+        the sentence that are strict subsets of any of the clauses in this
+        representation.
+
+        The algorithm was adapted from Ramesh, Anavai, George Becker, and
+        Neil V. Murray. "CNF and DNF considered harmful for computing prime
+        implicants/implicates."
+        Journal of Automated Reasoning 18.3 (1997): 337-356.
+        """
+        # todo: change .equivalent() to make this easier to test
+        # todo: make it more readable instead of a direct translation
+
+        Path_T = t.FrozenSet[Var]
+        Paths_T = t.Set[Path_T]
+
+        def PI(Paths: Paths_T, G: NNF) -> Paths_T:
+            if not Paths:
+                return set()
+            if isinstance(G, Var):
+                Paths_ = set()  # type: Paths_T
+                Paths__ = set()  # type: Paths_T
+                for P in Paths:
+                    if G in P:
+                        Paths_.add(P)
+                    elif ~G not in P:
+                        Paths__.add(P | {G})
+                Paths__ = Paths_ | (Paths__
+                                    - {P for P in Paths__
+                                       if any(P_ < P for P_ in Paths_)})
+                return Paths__
+            elif G == true:
+                return set()
+            elif G == false:
+                return Paths
+            elif isinstance(G, And):
+                X, Y = G.children
+                Paths_ = PI(Paths, X)
+                Paths__ = PI(Paths - Paths_, Y)
+                Paths__ = ((Paths_ | Paths__)
+                           - {P for P in Paths_
+                              if any(P_ < P for P_ in Paths__)}
+                           - {P for P in Paths__
+                              if any(P_ < P for P_ in Paths_)})
+                return Paths__
+            elif isinstance(G, Or):
+                X, Y = G.children
+                Paths_ = PI(Paths, X)
+                Paths__ = PI(Paths_, Y)
+                return Paths__
+            else:
+                raise TypeError(G)
+
+        return And(Or(P) for P in PI({frozenset()}, self.make_pairwise()))
+
     def to_MODS(self) -> 'NNF':
         """Convert the sentence to a MODS sentence."""
         return Or(And(Var(name, val)
@@ -614,6 +673,34 @@ class NNF(metaclass=abc.ABCMeta):
                 raise TypeError(node)
 
         return simple(self)
+
+    def make_pairwise(self) -> 'NNF':
+        """Alter the sentence so that all internal nodes have two children.
+
+        This can be easier to handle in some cases.
+        """
+        sentence = self.simplify()
+
+        if sentence == true or sentence == false:
+            return sentence
+
+        @memoize
+        def pair(node: NNF) -> NNF:
+            if isinstance(node, Var):
+                return node
+            elif isinstance(node, Internal):
+                # After simplification, there are >=2 children
+                a, *rest = node.children
+                if len(rest) == 1:
+                    return node.__class__(pair(child)
+                                          for child in node.children)
+                else:
+                    return node.__class__({pair(a),
+                                           pair(node.__class__(rest))})
+            else:
+                raise TypeError(node)
+
+        return pair(sentence)
 
     def deduplicate(self) -> 'NNF':
         """Return a copy of the sentence without any duplicate objects.

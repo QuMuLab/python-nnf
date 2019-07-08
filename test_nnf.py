@@ -527,3 +527,28 @@ def test_to_MODS(sentence: nnf.NNF):
 @given(MODS())
 def test_is_MODS(sentence: nnf.NNF):
     assert sentence.is_MODS()
+
+
+@given(NNF())
+def test_pairwise(sentence: nnf.NNF):
+    new = sentence.make_pairwise()
+    assert all(new.satisfied_by(model) for model in sentence.models())
+    assert all(sentence.condition(model).satisfiable()
+               for model in new.models())
+    if new not in {nnf.true, nnf.false}:
+        assert all(len(node.children) == 2
+                   for node in new.walk()
+                   if isinstance(node, nnf.Internal))
+
+
+@given(NNF())
+def test_implicates(sentence: nnf.NNF):
+    implicates = sentence.implicates()
+    # todo: use .equivalent() once it supports a difference in .vars()
+    assert all(implicates.satisfied_by(model) for model in sentence.models())
+    assert all(sentence.condition(model).satisfiable()
+               for model in implicates.models())
+    assert implicates.is_CNF()
+    assert not any(a.children < b.children
+                   for a in implicates.children
+                   for b in implicates.children)
