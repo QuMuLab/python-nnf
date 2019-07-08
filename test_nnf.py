@@ -11,7 +11,8 @@ import nnf
 
 from nnf import Var, And, Or, amc, dimacs, dsharp
 
-settings.register_profile('patient', deadline=500)
+settings.register_profile('patient', deadline=1000,
+                          suppress_health_check=(HealthCheck.too_slow,))
 settings.load_profile('patient')
 
 a, b, c = Var('a'), Var('b'), Var('c')
@@ -155,8 +156,10 @@ def test_MODS(sentence: nnf.Or):
 
 @given(MODS())
 def test_MODS_satisfiable(sentence: nnf.Or):
-    assume(len(sentence.children) != 0)
-    assert sentence.satisfiable()
+    if len(sentence.children) > 0:
+        assert sentence.satisfiable()
+    else:
+        assert not sentence.satisfiable()
 
 
 @pytest.fixture(scope='module', params=[True, False])
@@ -164,7 +167,6 @@ def merge_nodes(request):
     return request.param
 
 
-@settings(suppress_health_check=(HealthCheck.too_slow,))
 @given(sentence=DNNF())
 def test_DNNF_sat_strategies(sentence: nnf.NNF, merge_nodes):
     sat = sentence.satisfiable()
@@ -193,6 +195,7 @@ def test_idempotent_simplification(sentence: nnf.NNF, merge_nodes):
 @given(sentence=NNF())
 def test_simplify_preserves_meaning(sentence: nnf.NNF, merge_nodes):
     simple = sentence.simplify(merge_nodes)
+    assert sentence.equivalent(simple)
     for model in sentence.models():
         assert simple.satisfied_by(model)
     for model in simple.models():
@@ -403,11 +406,39 @@ def test_false_contradicts_everything(sentence: nnf.NNF):
 def test_equivalent(sentence: nnf.NNF):
     assert sentence.equivalent(sentence)
     assert sentence.equivalent(sentence | nnf.false)
-    assert not sentence.equivalent(sentence & nnf.Var('A'))
+    assert sentence.equivalent(sentence & (nnf.Var('A') | ~nnf.Var('A')))
     if sentence.satisfiable():
         assert not sentence.equivalent(sentence & nnf.false)
+        assert not sentence.equivalent(sentence & nnf.Var('A'))
     else:
         assert sentence.equivalent(sentence & nnf.false)
+        assert sentence.equivalent(sentence & nnf.Var('A'))
+
+
+@given(NNF(), NNF())
+def test_random_equivalent(a: nnf.NNF, b: nnf.NNF):
+    if a.vars() != b.vars():
+        if a.equivalent(b):
+            event("Equivalent, different vars")
+            assert b.equivalent(a)
+            for model in a.models():
+                assert b.condition(model).valid()
+            for model in b.models():
+                assert a.condition(model).valid()
+        else:
+            event("Not equivalent, different vars")
+            assert (any(not b.condition(model).valid()
+                        for model in a.models()) or
+                    any(not a.condition(model).valid()
+                        for model in b.models()))
+    else:
+        if a.equivalent(b):
+            event("Equivalent, same vars")
+            assert b.equivalent(a)
+            assert model_set(a.models()) == model_set(b.models())
+        else:
+            event("Not equivalent, same vars")
+            assert model_set(a.models()) != model_set(b.models())
 
 
 @given(NNF())
@@ -532,9 +563,7 @@ def test_is_MODS(sentence: nnf.NNF):
 @given(NNF())
 def test_pairwise(sentence: nnf.NNF):
     new = sentence.make_pairwise()
-    assert all(new.satisfied_by(model) for model in sentence.models())
-    assert all(sentence.condition(model).satisfiable()
-               for model in new.models())
+    assert new.equivalent(sentence)
     if new not in {nnf.true, nnf.false}:
         assert all(len(node.children) == 2
                    for node in new.walk()
@@ -544,10 +573,7 @@ def test_pairwise(sentence: nnf.NNF):
 @given(NNF())
 def test_implicates(sentence: nnf.NNF):
     implicates = sentence.implicates()
-    # todo: use .equivalent() once it supports a difference in .vars()
-    assert all(implicates.satisfied_by(model) for model in sentence.models())
-    assert all(sentence.condition(model).satisfiable()
-               for model in implicates.models())
+    assert implicates.equivalent(sentence)
     assert implicates.is_CNF()
     assert not any(a.children < b.children
                    for a in implicates.children

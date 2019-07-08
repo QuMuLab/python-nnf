@@ -434,31 +434,88 @@ class NNF(metaclass=abc.ABCMeta):
     def equivalent(self, other: 'NNF') -> bool:
         """Test whether two sentences have the same models.
 
-        If two sentences don't mention the same variables they're not
-        considered equivalent.
+        If the sentences don't contain the same variables they are
+        considered equivalent if the variables that aren't shared are
+        independent, i.e. their value doesn't affect the value of the sentence.
 
         Warning: may be very slow. Decomposability helps.
         """
+        # TODO: add arguments for decomposability, determinism (per sentence?)
         if self == other:
             return True
-        vars_a = self.vars()
-        vars_b = other.vars()
-        if vars_a != vars_b:
-            return False
+
         models_a = list(self.models())
         models_b = list(other.models())
-        if len(models_a) != len(models_b):
-            return False
         if models_a == models_b:
             return True
 
-        def dict_hashable(
-                model: t.Dict[Name, bool]
-        ) -> t.FrozenSet[t.Tuple[Name, bool]]:
-            return frozenset((name, model[name]) for name in vars_a)
+        vars_a = self.vars()
+        vars_b = other.vars()
+        if vars_a == vars_b:
+            if len(models_a) != len(models_b):
+                return False
 
-        return (set(map(dict_hashable, models_a)) ==
-                set(map(dict_hashable, models_b)))
+        Model_T = t.FrozenSet[t.Tuple[Name, bool]]
+
+        def dict_hashable(model: t.Dict[Name, bool]) -> Model_T:
+            return frozenset(model.items())
+
+        modset_a = frozenset(map(dict_hashable, models_a))
+        modset_b = frozenset(map(dict_hashable, models_b))
+
+        if vars_a == vars_b:
+            return modset_a == modset_b
+
+        # There are variables that appear in one sentence but not the other
+        # The sentences can still be equivalent if those variables don't
+        # affect the truth value of the sentence they appear in
+        # That is, for every model that contains such a variable there's
+        # another model with that variable flipped
+
+        # In such a scenario we can calculate the number of "shared" models in
+        # advance
+        # Each additional variable not shared with the other doubles the
+        # number of models compared to the number of shared models
+        # so we calculate those factors and check whether that works out,
+        # which is much cheaper than actually checking everything, which we
+        # do afterwards if necessary
+        if len(modset_a) % 2**(len(vars_a - vars_b)) != 0:
+            return False
+        if len(modset_b) % 2**(len(vars_b - vars_a)) != 0:
+            return False
+        if (len(modset_a) // 2**(len(vars_a - vars_b)) !=
+                len(modset_b) // 2**(len(vars_b - vars_a))):
+            return False
+
+        def flip(model: Model_T, var: Name) -> Model_T:
+            other = (var, False) if (var, True) in model else (var, True)
+            return (model - {(var, False), (var, True)}) | {other}
+
+        modset_a_small = set()  # type: t.Set[Model_T]
+        for model in modset_a:
+            for var in vars_a - vars_b:
+                if flip(model, var) not in modset_a:
+                    return False
+            true_vars = {(var, True) for var in vars_a - vars_b}
+            if true_vars <= model:  # Don't add it multiple times
+                modset_a_small.add(model - true_vars)
+
+        modset_b_small = set()  # type: t.Set[Model_T]
+        for model in modset_b:
+            for var in vars_b - vars_a:
+                if flip(model, var) not in modset_b:
+                    return False
+            true_vars = {(var, True) for var in vars_b - vars_a}
+            if true_vars <= model:
+                modset_b_small.add(model - true_vars)
+
+        if modset_a_small != modset_b_small:
+            return False
+
+        assert (len(modset_a_small)
+                == len(modset_a) // 2**(len(vars_a - vars_b)))
+
+        return True
 
     def negate(self) -> 'NNF':
         """Return a new sentence that's true iff the original is false."""
@@ -489,7 +546,6 @@ class NNF(metaclass=abc.ABCMeta):
         implicants/implicates."
         Journal of Automated Reasoning 18.3 (1997): 337-356.
         """
-        # todo: change .equivalent() to make this easier to test
         # todo: make it more readable instead of a direct translation
 
         Path_T = t.FrozenSet[Var]
