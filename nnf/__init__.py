@@ -539,7 +539,7 @@ class NNF(metaclass=abc.ABCMeta):
         returns a conjunction of clauses that's equivalent to the original
         sentence, and minimal, meaning that there are no clauses implied by
         the sentence that are strict subsets of any of the clauses in this
-        representation.
+        representation, so no clauses could be made smaller.
 
         The algorithm was adapted from Ramesh, Anavai, George Becker, and
         Neil V. Murray. "CNF and DNF considered harmful for computing prime
@@ -588,7 +588,24 @@ class NNF(metaclass=abc.ABCMeta):
             else:
                 raise TypeError(G)
 
-        return And(Or(P) for P in PI({frozenset()}, self.make_pairwise()))
+        sentence = self.make_pairwise()
+
+        if (And(Or(P) for P in PI({frozenset()}, sentence.negate())).negate()
+                == false):
+            return And({false})
+
+        return And(Or(P) for P in PI({frozenset()}, sentence))
+
+    def implicants(self) -> 'Or':
+        """Extract the prime implicants of the sentence.
+
+        Prime implicants are the minimal terms that imply the sentence. This
+        method returns a disjunction of terms that's equivalent to the
+        original sentence, and minimal, meaning that there are no terms that
+        imply the sentence that are strict subsets of any of the terms in
+        this representation, so no terms could be made smaller.
+        """
+        return self.negate().implicates().negate()
 
     def to_MODS(self) -> 'NNF':
         """Convert the sentence to a MODS sentence."""
@@ -1129,6 +1146,12 @@ class Var(NNF):
     def _sorting_key(self) -> t.Tuple[bool, str, bool]:
         return False, str(self.name), not self.true
 
+    if t.TYPE_CHECKING:
+        # Needed because mypy doesn't like it when you type the self
+        # parameter with a subclass, even when using @overload
+        def negate(self) -> 'Var':
+            ...
+
 
 class Internal(NNF):
     """Base class for internal nodes, i.e. And and Or nodes."""
@@ -1202,6 +1225,10 @@ class And(Internal):
             return 'true'
         return super().__repr__()
 
+    if t.TYPE_CHECKING:
+        def negate(self) -> 'Or':
+            ...
+
 
 class Or(Internal):
     """Disjunction nodes, which are true if any of their children are."""
@@ -1255,6 +1282,10 @@ class Or(Internal):
         if not self.children:
             return 'false'
         return super().__repr__()
+
+    if t.TYPE_CHECKING:
+        def negate(self) -> 'And':
+            ...
 
 
 def decision(var: Var, if_true: NNF, if_false: NNF) -> Or:

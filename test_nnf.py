@@ -578,3 +578,23 @@ def test_implicates(sentence: nnf.NNF):
     assert not any(a.children < b.children
                    for a in implicates.children
                    for b in implicates.children)
+
+
+@given(NNF())
+def test_implicants(sentence: nnf.NNF):
+    implicants = sentence.implicants()
+    assert implicants.equivalent(sentence)
+    assert implicants.is_DNF()
+    assert not any(a.children < b.children
+                   for a in implicants.children
+                   for b in implicants.children)
+
+
+@given(NNF())
+def test_implicates_implicants_idempotent(sentence: nnf.NNF):
+    implicants = sentence.implicants()
+    implicates = sentence.implicates()
+    assert implicants.implicants() == implicants
+    assert implicates.implicates() == implicates
+    assert implicants.implicates() == implicates
+    assert implicates.implicants() == implicants
