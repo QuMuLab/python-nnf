@@ -15,6 +15,9 @@ setuptools.setup(
         'nnf': ['py.typed'],  # Mark package as having inline types
     },
     python_requires='>=3.4',
+    install_requires=[
+        'typing;python_version<"3.5"',
+    ],
     license="ISC",
     long_description=long_description,
     long_description_content_type="text/markdown",
