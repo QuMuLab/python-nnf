@@ -1,3 +1,4 @@
+import shutil
 import os
 
 from pathlib import Path
@@ -687,3 +688,27 @@ def test_iff(a: nnf.NNF, b: nnf.NNF):
     for model in nnf.all_models(c.vars()):
         assert ((a.satisfied_by(model) == b.satisfied_by(model)) ==
                 c.satisfied_by(model))
+
+
+if shutil.which('dsharp') is not None:
+    def test_dsharp_compile_uf20():
+        for sentence in uf20_cnf:
+            compiled = dsharp.compile(sentence)
+            compiled_smooth = dsharp.compile(sentence, smooth=True)
+            assert sentence.equivalent(compiled)
+            assert sentence.equivalent(compiled_smooth)
+            assert compiled.decomposable()
+            assert compiled_smooth.decomposable()
+            assert compiled_smooth.smooth()
+
+    @given(CNF())
+    def test_dsharp_compile(sentence: And[Or[Var]]):
+        assume(all(len(clause) > 0 for clause in sentence))
+        compiled = dsharp.compile(sentence)
+        compiled_smooth = dsharp.compile(sentence, smooth=True)
+        assert compiled.decomposable()
+        assert compiled_smooth.decomposable()
+        assert compiled_smooth.smooth()
+        if sentence.satisfiable():  # See nnf.dsharp.__doc__
+            assert sentence.equivalent(compiled)
+            assert sentence.equivalent(compiled_smooth)

@@ -66,6 +66,12 @@ A parser and serializer for the
 implemented in `nnf.dimacs`, with a standard `load`/`loads`/`dump`/`dumps`
 interface.
 
+# DSHARP interoperability
+
+[DSHARP](https://bitbucket.org/haz/dsharp) is a program that compiles CNF
+sentences to (s)d-DNNF sentences. The `nnf.dsharp` module contains tools for
+parsing its output format and for invoking the compiler.
+
 # Algebraic Model Counting
 
 `nnf.amc` has a basic implementation of

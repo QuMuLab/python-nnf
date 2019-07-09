@@ -140,24 +140,23 @@ def _dump_cnf(
 
     fp.write("p cnf {} {}\n".format(num_variables, len(obj.children)))
 
-    first = True
     for clause in obj.children:
         if not isinstance(clause, Or):
             raise TypeError("CNF sentences must be conjunctions of "
                             "disjunctions")
         if not len(clause.children) > 0:
             raise TypeError("CNF sentences shouldn't have empty clauses")
-        if not first:
-            fp.write('0')
-        else:
-            first = False
+        first = True
         for child in clause.children:
             if not isinstance(child, Var):
                 raise TypeError("CNF sentences must be conjunctions of "
                                 "disjunctions of variables")
-            fp.write(' ')
+            if not first:
+                fp.write(' ')
+            else:
+                first = False
             fp.write(_format_var(child, num_variables, var_labels))
-        fp.write('\n')
+        fp.write(' 0\n')
 
 
 def dumps(
@@ -175,7 +174,7 @@ def dumps(
     return buffer.getvalue()
 
 
-def load(fp: t.TextIO) -> NNF:
+def load(fp: t.TextIO) -> t.Union[NNF, And[Or[Var]]]:
     """Load a sentence from an open file.
 
     The format is automatically detected.
@@ -209,7 +208,7 @@ def load(fp: t.TextIO) -> NNF:
         )
 
 
-def loads(s: str) -> NNF:
+def loads(s: str) -> t.Union[NNF, And[Or[Var]]]:
     """Like :func:`load`, but from a string instead of from a file."""
     return load(io.StringIO(s))
 
