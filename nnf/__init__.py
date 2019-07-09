@@ -20,6 +20,8 @@ import itertools
 import operator
 import typing as t
 
+from collections import Counter
+
 if t.TYPE_CHECKING:
     import nnf
 
@@ -220,8 +222,23 @@ class NNF(metaclass=abc.ABCMeta):
 
         return sat(self)
 
-    def satisfiable(self, decomposable: _Tristate = None) -> bool:
-        """Some set of values exists that makes the sentence correct."""
+    def satisfiable(
+            self,
+            *,
+            decomposable: _Tristate = None,
+            cnf: _Tristate = None
+    ) -> bool:
+        """Some set of values exists that makes the sentence correct.
+
+        This method doesn't necessarily try to find an example, which can
+        make it faster. It's decent at decomposable sentence and sentences in
+        CNF, and bad at other sentences.
+
+        :param decomposable: Indicate whether the sentence is decomposable. By
+                             default, this will be checked.
+        :param cnf: Indicate whether the sentence is in CNF. By default,
+                    this will be checked.
+        """
         if not self._satisfiable_decomposable():
             return False
 
@@ -232,6 +249,13 @@ class NNF(metaclass=abc.ABCMeta):
             # Would've been picked up already if not satisfiable
             return True
 
+        if cnf is None:
+            cnf = self.is_CNF()
+
+        if cnf:
+            return self._cnf_satisfiable()
+
+        # todo: use a better fallback
         return any(self.satisfied_by(model)
                    for model in all_models(self.vars()))
 
@@ -314,10 +338,25 @@ class NNF(metaclass=abc.ABCMeta):
 
         return not self.negate().satisfiable()
 
+    def implies(self, other: 'NNF') -> bool:
+        """Return whether ``other`` is always true if the sentence is true.
+
+        This is faster if ``self`` is a term or ``other`` is a clause.
+        """
+        if other.clause():
+            return not self.condition(other.negate().to_model()).satisfiable()
+        if self.term():
+            return not other.negate().condition(self.to_model()).satisfiable()
+        return (~self | other).valid()  # todo: speed this up
+
+    entails = implies
+
     def models(
             self,
+            *,
             decomposable: _Tristate = None,
-            deterministic: bool = False
+            deterministic: bool = False,
+            cnf: _Tristate = None
     ) -> t.Iterator[Model]:
         """Yield all dictionaries of values that make the sentence correct.
 
@@ -336,10 +375,18 @@ class NNF(metaclass=abc.ABCMeta):
                               deterministic. Set this to ``True`` if you
                               know it to be deterministic, or want it to be
                               treated as deterministic.
+        :param cnf: Indicate whether the sentence is in CNF, in which case a
+                    SAT solver will be used. Set to ``True`` to skip the
+                    automatic check and immediately use that method, set to
+                    ``False`` to force the use of another algorithm.
         """
         if decomposable is None:
             decomposable = self.decomposable()
-        if deterministic:
+        if cnf is None:
+            cnf = self.is_CNF()
+        if cnf:
+            yield from self._cnf_models()
+        elif deterministic or self.is_DNF():
             yield from self._models_deterministic(decomposable=decomposable)
         elif decomposable:
             yield from self._models_decomposable()
@@ -404,6 +451,7 @@ class NNF(metaclass=abc.ABCMeta):
     def contradicts(
             self,
             other: 'NNF',
+            *,
             decomposable: _Tristate = None
     ) -> bool:
         """There is no set of values that satisfies both sentences.
@@ -532,77 +580,187 @@ class NNF(metaclass=abc.ABCMeta):
 
         return neg(self)
 
-    def implicates(self) -> 'And':
-        """Extract the prime implicates of the sentence.
+    def _cnf_satisfiable(self) -> bool:
+        """A naive DPLL SAT solver."""
+        def DPLL(clauses: t.FrozenSet[t.FrozenSet[Var]]) -> bool:
+            if not clauses:
+                return True
+            if frozenset() in clauses:
+                return False
+            to_accept = set()  # type: t.Set[Var]
+            to_remove = set()  # type: t.Set[Var]
+            while True:
+                for clause in clauses:
+                    if len(clause) == 1:
+                        var, = clause
+                        if var in to_remove:  # contradiction
+                            return False
+                        to_accept.add(var)
+                        to_remove.add(~var)
+                        acc = {var}
+                        rem = {~var}
+                        clauses = frozenset(
+                            clause - rem
+                            for clause in clauses
+                            if not clause & acc
+                        )
+                        if frozenset() in clauses:
+                            return False
+                        break
+                else:
+                    break
+            if not clauses:
+                return True
+            remaining = frozenset(var for clause in clauses for var in clause)
+            pure = frozenset(var for var in remaining if ~var not in remaining)
+            clauses = frozenset(
+                clause for clause in clauses
+                if not clause & pure
+            )
+            if not clauses:
+                return True
+            new_var = Counter(var.name
+                              for clause in clauses
+                              for var in clause).most_common(1)[0][0]
+            return (DPLL(clauses | {frozenset({Var(new_var)})}) or
+                    DPLL(clauses | {frozenset({Var(new_var, False)})}))
 
-        Prime implicates are the minimal implied clauses. This method
-        returns a conjunction of clauses that's equivalent to the original
-        sentence, and minimal, meaning that there are no clauses implied by
-        the sentence that are strict subsets of any of the clauses in this
-        representation, so no clauses could be made smaller.
+        return DPLL(
+            frozenset(
+                frozenset(clause.children)
+                for clause in self.children  # type: ignore
+            )
+        )
 
-        The algorithm was adapted from Ramesh, Anavai, George Becker, and
-        Neil V. Murray. "CNF and DNF considered harmful for computing prime
-        implicants/implicates."
-        Journal of Automated Reasoning 18.3 (1997): 337-356.
+    def _cnf_models(self) -> t.Iterator[Model]:
+        """A naive DPLL SAT solver, modified to find all solutions."""
+        def DPLL_models(
+                clauses: t.FrozenSet[t.FrozenSet[Var]]
+        ) -> t.Iterator[Model]:
+            if not clauses:
+                yield {}
+                return
+            if frozenset() in clauses:
+                return
+            to_accept = set()  # type: t.Set[Var]
+            to_remove = set()  # type: t.Set[Var]
+            while True:
+                for clause in clauses:
+                    if len(clause) == 1:
+                        var, = clause
+                        if var in to_remove:  # contradiction
+                            return
+                        to_accept.add(var)
+                        to_remove.add(~var)
+                        acc = {var}
+                        rem = {~var}
+                        clauses = frozenset(
+                            clause - rem
+                            for clause in clauses
+                            if not clause & acc
+                        )
+                        if frozenset() in clauses:
+                            return
+                        break
+                else:
+                    break
+            solution = {var.name: var.true for var in to_accept}
+            if not clauses:
+                yield solution
+                return
+            new_var = Counter(var.name
+                              for clause in clauses
+                              for var in clause).most_common(1)[0][0]
+            for refined_solution in itertools.chain(
+                    DPLL_models(clauses | {frozenset({Var(new_var)})}),
+                    DPLL_models(clauses | {frozenset({Var(new_var, False)})})
+            ):
+                assert not solution.keys() & refined_solution.keys()
+                refined_solution.update(solution)
+                yield refined_solution
+
+        if not self.is_CNF():
+            raise ValueError("Sentence not in CNF")
+
+        names = self.vars()
+
+        for model in DPLL_models(
+            frozenset(
+                frozenset(clause.children)
+                for clause in self.children  # type: ignore
+            )
+        ):
+            for missing in all_models(names - model.keys()):
+                missing.update(model)
+                yield missing
+
+    def _do_PI(self) -> t.Tuple[t.Set['And'], t.Set['Or']]:
+        """Compute the prime implicants and implicates of the sentence.
+
+        This uses an algorithm adapted straightforwardly from
+        PREVITI, Alessandro, et al. Prime compilation of non-clausal formulae.
+        In: Twenty-Fourth International Joint Conference on Artificial
+        Intelligence. 2015.
         """
-        # todo: make it more readable instead of a direct translation
-        # todo: this algorithm doesn't seem to actually work
-        #  for example:
-        #  >>> s = Or({~Var(1), And({~Var(2), Var(2)})})
-        #  >>> s.implicates()
-        #  And({Or({~Var(1), Var(2)}), Or({~Var(2), ~Var(1)})})
-        #  >>> s.implicants().implicates()
-        #  And({Or({~Var(1)})})
-        #  The first one is incorrect
+        def MaxModel(sentence: And) -> t.Optional[Model]:
+            try:
+                return max(sentence._cnf_models(),
+                           key=lambda model: sum(model.values()))
+            except ValueError:
+                return None
 
-        Path_T = t.FrozenSet[Var]
-        Paths_T = t.Set[Path_T]
+        def Map(model: Model) -> t.Iterator[Var]:
+            for (var, truthness), value in model.items():  # type: ignore
+                if value:
+                    yield Var(var, truthness)
 
-        def PI(Paths: Paths_T, G: NNF) -> Paths_T:
-            if not Paths:
-                return set()
-            if isinstance(G, Var):
-                Paths_ = set()  # type: Paths_T
-                Paths__ = set()  # type: Paths_T
-                for P in Paths:
-                    if G in P:
-                        Paths_.add(P)
-                    elif ~G not in P:
-                        Paths__.add(P | {G})
-                Paths__ = Paths_ | (Paths__
-                                    - {P for P in Paths__
-                                       if any(P_ < P for P_ in Paths_)})
-                return Paths__
-            elif G == true:
-                return set()
-            elif G == false:
-                return Paths
-            elif isinstance(G, And):
-                X, Y = G.children
-                Paths_ = PI(Paths, X)
-                Paths__ = PI(Paths - Paths_, Y)
-                Paths__ = ((Paths_ | Paths__)
-                           - {P for P in Paths_
-                              if any(P_ < P for P_ in Paths__)}
-                           - {P for P in Paths__
-                              if any(P_ < P for P_ in Paths_)})
-                return Paths__
-            elif isinstance(G, Or):
-                X, Y = G.children
-                Paths_ = PI(Paths, X)
-                Paths__ = PI(Paths_, Y)
-                return Paths__
+        def ReduceImplicant(model: t.Set[Var], sentence: NNF) -> And:
+            while True:
+                for var in model:
+                    if And(model - {var}).implies(sentence):
+                        model.remove(var)
+                        break
+                else:
+                    break
+            return And(model)
+
+        def ReduceImplicate(model: t.Set[Var], sentence: NNF) -> Or:
+            model = {~var for var in model}
+            while True:
+                for var in model:
+                    if sentence.implies(Or(model - {var})):
+                        model.remove(var)
+                        break
+                else:
+                    break
+            return Or(model)
+
+        F = self
+        F_neg = self.negate()
+
+        implicants = set()  # type: t.Set[And]
+        implicates = set()  # type: t.Set[Or]
+
+        H = And(Var((v, True), False) | Var((v, False), False)
+                for v in self.vars())
+        while True:
+            A_H = MaxModel(H)
+            if A_H is None:
+                return implicants, implicates
+            A_F = set(Map(A_H))
+            if not And(A_F | {F_neg}).satisfiable():
+                # assert And(A_F).implies(F)
+                I_n = ReduceImplicant(A_F, F)
+                implicants.add(I_n)
+                b = {Var((v.name, v.true), False)  # type: ignore
+                     for v in I_n.children}
             else:
-                raise TypeError(G)
-
-        sentence = self.make_pairwise()
-
-        if (And(Or(P) for P in PI({frozenset()}, sentence.negate())).negate()
-                == false):
-            return And({false})
-
-        return And(Or(P) for P in PI({frozenset()}, sentence))
+                # assert F.implies(And(A_F).negate())
+                I_e = ReduceImplicate(A_F, F)
+                implicates.add(I_e)
+                b = {Var((v.name, v.true), True)  # type: ignore
+                     for v in I_e.children}
+            H = And(H.children | {Or(b)})
 
     def implicants(self) -> 'Or':
         """Extract the prime implicants of the sentence.
@@ -613,7 +771,18 @@ class NNF(metaclass=abc.ABCMeta):
         imply the sentence that are strict subsets of any of the terms in
         this representation, so no terms could be made smaller.
         """
-        return self.negate().implicates().negate()
+        return Or(self._do_PI()[0])
+
+    def implicates(self) -> 'And':
+        """Extract the prime implicates of the sentence.
+
+        Prime implicates are the minimal implied clauses. This method
+        returns a conjunction of clauses that's equivalent to the original
+        sentence, and minimal, meaning that there are no clauses implied by
+        the sentence that are strict subsets of any of the clauses in this
+        representation, so no clauses could be made smaller.
+        """
+        return And(self._do_PI()[1])
 
     def to_MODS(self) -> 'NNF':
         """Convert the sentence to a MODS sentence."""
@@ -937,6 +1106,7 @@ class NNF(metaclass=abc.ABCMeta):
 
     def _models_deterministic(
             self,
+            *,
             decomposable: _Tristate = None
     ) -> t.Iterator[Model]:
         """Model enumeration for deterministic sentences.

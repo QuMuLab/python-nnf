@@ -21,9 +21,14 @@ fig1a = (~a & b) | (a & ~b)
 fig1b = (~a | ~b) & (a | b)
 
 uf20 = [
-    dsharp.loads(file.open().read())
+    dsharp.load(file.open())
     for file in (Path(os.path.dirname(__file__))
                  / 'testdata' / 'satlib' / 'uf20').glob('*.nnf')
+]
+uf20_cnf = [
+    dimacs.load(file.open())
+    for file in (Path(os.path.dirname(__file__))
+                 / 'testdata' / 'satlib' / 'uf20').glob('*.cnf')
 ]
 
 
@@ -128,7 +133,7 @@ def internal(draw, children):
 
 @st.composite
 def NNF(draw):
-    return draw(st.recursive(leaves(), internal))
+    return draw(st.recursive(variables(), internal))
 
 
 @st.composite
@@ -598,3 +603,37 @@ def test_implicates_implicants_idempotent(sentence: nnf.NNF):
     assert implicates.implicates() == implicates
     assert implicants.implicates() == implicates
     assert implicates.implicants() == implicants
+
+
+@given(NNF(), NNF())
+def test_implies(a: nnf.NNF, b: nnf.NNF):
+    if a.implies(b):
+        event("Implication")
+        for model in a.models():
+            assert b.condition(model).valid()
+    else:
+        event("No implication")
+        assert any(not b.condition(model).valid()
+                   for model in a.models())
+
+
+@given(CNF())
+def test_cnf_sat(sentence: nnf.NNF):
+    assert sentence.is_CNF()
+    assert sentence.satisfiable(cnf=True) == sentence.satisfiable(cnf=False)
+    assert (model_set(sentence.models(cnf=True)) ==
+            model_set(sentence.models(cnf=False, deterministic=True)))
+
+
+def test_uf20_cnf_sat():
+    for sentence in uf20_cnf:
+        assert sentence.is_CNF()
+        assert sentence.satisfiable()
+        # It would be nice to compare .models() output to another algorithm
+        # But even 20 variables is too much
+        # So let's just hope that test_cnf_sat does enough
+        at_least_one = False
+        for model in sentence.models(cnf=True):
+            assert sentence.satisfied_by(model)
+            at_least_one = True
+        assert at_least_one
