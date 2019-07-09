@@ -12,6 +12,14 @@ Module contents
 Submodules
 ----------
 
+nnf.operators module
+--------------------
+
+.. automodule:: nnf.operators
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 nnf.dimacs module
 -----------------
 

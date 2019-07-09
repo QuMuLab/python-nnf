@@ -9,7 +9,7 @@ from hypothesis import (assume, event, given, strategies as st, settings,
 
 import nnf
 
-from nnf import Var, And, Or, amc, dimacs, dsharp
+from nnf import Var, And, Or, amc, dimacs, dsharp, operators
 
 settings.register_profile('patient', deadline=1000,
                           suppress_health_check=(HealthCheck.too_slow,))
@@ -637,3 +637,51 @@ def test_uf20_cnf_sat():
             assert sentence.satisfied_by(model)
             at_least_one = True
         assert at_least_one
+
+
+@given(NNF(), NNF())
+def test_xor(a: nnf.NNF, b: nnf.NNF):
+    c = operators.xor(a, b)
+    for model in nnf.all_models(c.vars()):
+        assert (a.satisfied_by(model) ^ b.satisfied_by(model) ==
+                c.satisfied_by(model))
+
+
+@given(NNF(), NNF())
+def test_nand(a: nnf.NNF, b: nnf.NNF):
+    c = operators.nand(a, b)
+    for model in nnf.all_models(c.vars()):
+        assert ((a.satisfied_by(model) and b.satisfied_by(model)) !=
+                c.satisfied_by(model))
+
+
+@given(NNF(), NNF())
+def test_nor(a: nnf.NNF, b: nnf.NNF):
+    c = operators.nor(a, b)
+    for model in nnf.all_models(c.vars()):
+        assert ((a.satisfied_by(model) or b.satisfied_by(model)) !=
+                c.satisfied_by(model))
+
+
+@given(NNF(), NNF())
+def test_implies(a: nnf.NNF, b: nnf.NNF):
+    c = operators.implies(a, b)
+    for model in nnf.all_models(c.vars()):
+        assert ((a.satisfied_by(model) and not b.satisfied_by(model)) !=
+                c.satisfied_by(model))
+
+
+@given(NNF(), NNF())
+def test_implied_by(a: nnf.NNF, b: nnf.NNF):
+    c = operators.implied_by(a, b)
+    for model in nnf.all_models(c.vars()):
+        assert ((b.satisfied_by(model) and not a.satisfied_by(model)) !=
+                c.satisfied_by(model))
+
+
+@given(NNF(), NNF())
+def test_iff(a: nnf.NNF, b: nnf.NNF):
+    c = operators.iff(a, b)
+    for model in nnf.all_models(c.vars()):
+        assert ((a.satisfied_by(model) == b.satisfied_by(model)) ==
+                c.satisfied_by(model))

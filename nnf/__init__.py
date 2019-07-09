@@ -31,7 +31,7 @@ Model = t.Dict[Name, bool]
 memoize = functools.lru_cache(maxsize=None)
 
 __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Builder', 'all_models',
-           'decision', 'true', 'false', 'dsharp', 'dimacs', 'amc')
+           'decision', 'true', 'false', 'dsharp', 'dimacs', 'amc', 'operators')
 
 
 def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
@@ -61,11 +61,11 @@ class NNF(metaclass=abc.ABCMeta):
     """Base class for all NNF sentences."""
     __slots__ = ()
 
-    def __and__(self, other: 'NNF') -> 'NNF':
+    def __and__(self, other: 'NNF') -> 'And':
         """And({self, other})"""
         return And({self, other})
 
-    def __or__(self, other: 'NNF') -> 'NNF':
+    def __or__(self, other: 'NNF') -> 'Or':
         """Or({self, other})"""
         return Or({self, other})
 
@@ -347,7 +347,7 @@ class NNF(metaclass=abc.ABCMeta):
             return not self.condition(other.negate().to_model()).satisfiable()
         if self.term():
             return not other.negate().condition(self.to_model()).satisfiable()
-        return (~self | other).valid()  # todo: speed this up
+        return (self.negate() | other).valid()  # todo: speed this up
 
     entails = implies
 
@@ -1250,9 +1250,6 @@ class NNF(metaclass=abc.ABCMeta):
         if not isinstance(other, NNF):
             return NotImplemented
         return self._sorting_key() >= other._sorting_key()
-
-    def __invert__(self) -> 'NNF':
-        return self.negate()
 
 
 class Var(NNF):
