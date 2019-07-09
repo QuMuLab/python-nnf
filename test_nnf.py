@@ -597,6 +597,7 @@ def test_implicants(sentence: nnf.NNF):
 
 @given(NNF())
 def test_implicates_implicants_idempotent(sentence: nnf.NNF):
+    assume(len(sentence.vars()) <= 6)
     implicants = sentence.implicants()
     implicates = sentence.implicates()
     assert implicants.implicants() == implicants
