@@ -272,7 +272,7 @@ def _parse_sat(tokens: 't.Deque[str]') -> NNF:
         raise ValueError("Found unexpected token {!r}".format(cur))
 
 
-def _load_cnf(fp: t.TextIO) -> NNF:
+def _load_cnf(fp: t.TextIO) -> And[Or[Var]]:
     tokens = []  # type: t.List[str]
     for line in fp:
         if line.startswith('c'):
@@ -284,8 +284,8 @@ def _load_cnf(fp: t.TextIO) -> NNF:
     return _parse_cnf(tokens)
 
 
-def _parse_cnf(tokens: t.Iterable[str]) -> NNF:
-    clauses = set()  # type: t.Set[Or]
+def _parse_cnf(tokens: t.Iterable[str]) -> And[Or[Var]]:
+    clauses = set()  # type: t.Set[Or[Var]]
     clause = set()  # type: t.Set[Var]
     for token in tokens:
         if token == '0':

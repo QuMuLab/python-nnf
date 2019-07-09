@@ -6,12 +6,11 @@ import operator
 
 import typing as t
 
-from nnf import NNF, And, Var, Or, Internal, Name, true, false
+from nnf import NNF, And, Var, Or, Internal, Name, true, false, memoize
 
 neg_inf = float('-inf')
 
 T = t.TypeVar('T')
-memoize = functools.lru_cache(maxsize=None)
 
 __all__ = ('eval', 'reduce', 'SAT', 'NUM_SAT', 'WMC', 'PROB', 'GRAD', 'MPE',
            'maxplus_reduce')

@@ -451,6 +451,7 @@ def test_smoothing(sentence: nnf.NNF):
     if not sentence.smooth():
         event("Sentence not smooth yet")
         smoothed = sentence.make_smooth()
+        assert type(sentence) is type(smoothed)
         assert smoothed.smooth()
         assert sentence.equivalent(smoothed)
         assert smoothed.make_smooth() == smoothed

@@ -28,8 +28,6 @@ if t.TYPE_CHECKING:
 Name = t.Hashable
 Model = t.Dict[Name, bool]
 
-memoize = functools.lru_cache(maxsize=None)
-
 __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Builder', 'all_models',
            'decision', 'true', 'false', 'dsharp', 'dimacs', 'amc', 'operators')
 
@@ -54,18 +52,27 @@ def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
 
 
 T = t.TypeVar('T')
+T_NNF = t.TypeVar('T_NNF', bound='NNF')
+U_NNF = t.TypeVar('U_NNF', bound='NNF')
+T_NNF_co = t.TypeVar('T_NNF_co', bound='NNF', covariant=True)
 _Tristate = t.Optional[bool]
+
+if t.TYPE_CHECKING:
+    def memoize(func: T) -> T:
+        ...
+else:
+    memoize = functools.lru_cache(maxsize=None)
 
 
 class NNF(metaclass=abc.ABCMeta):
     """Base class for all NNF sentences."""
     __slots__ = ()
 
-    def __and__(self, other: 'NNF') -> 'And':
+    def __and__(self: T_NNF, other: U_NNF) -> 'And[t.Union[T_NNF, U_NNF]]':
         """And({self, other})"""
         return And({self, other})
 
-    def __or__(self, other: 'NNF') -> 'Or':
+    def __or__(self: T_NNF, other: U_NNF) -> 'Or[t.Union[T_NNF, U_NNF]]':
         """Or({self, other})"""
         return Or({self, other})
 
@@ -694,7 +701,7 @@ class NNF(metaclass=abc.ABCMeta):
                 missing.update(model)
                 yield missing
 
-    def _do_PI(self) -> t.Tuple[t.Set['And'], t.Set['Or']]:
+    def _do_PI(self) -> t.Tuple[t.Set['And[Var]'], t.Set['Or[Var]']]:
         """Compute the prime implicants and implicates of the sentence.
 
         This uses an algorithm adapted straightforwardly from
@@ -702,7 +709,7 @@ class NNF(metaclass=abc.ABCMeta):
         In: Twenty-Fourth International Joint Conference on Artificial
         Intelligence. 2015.
         """
-        def MaxModel(sentence: And) -> t.Optional[Model]:
+        def MaxModel(sentence: And[Or[Var]]) -> t.Optional[Model]:
             try:
                 return max(sentence._cnf_models(),
                            key=lambda model: sum(model.values()))
@@ -714,7 +721,7 @@ class NNF(metaclass=abc.ABCMeta):
                 if value:
                     yield Var(var, truthness)
 
-        def ReduceImplicant(model: t.Set[Var], sentence: NNF) -> And:
+        def ReduceImplicant(model: t.Set[Var], sentence: NNF) -> And[Var]:
             while True:
                 for var in model:
                     if And(model - {var}).implies(sentence):
@@ -724,7 +731,7 @@ class NNF(metaclass=abc.ABCMeta):
                     break
             return And(model)
 
-        def ReduceImplicate(model: t.Set[Var], sentence: NNF) -> Or:
+        def ReduceImplicate(model: t.Set[Var], sentence: NNF) -> Or[Var]:
             model = {~var for var in model}
             while True:
                 for var in model:
@@ -738,31 +745,29 @@ class NNF(metaclass=abc.ABCMeta):
         F = self
         F_neg = self.negate()
 
-        implicants = set()  # type: t.Set[And]
-        implicates = set()  # type: t.Set[Or]
+        implicants = set()  # type: t.Set[And[Var]]
+        implicates = set()  # type: t.Set[Or[Var]]
 
         H = And(Var((v, True), False) | Var((v, False), False)
-                for v in self.vars())
+                for v in self.vars())  # type: And[Or[Var]]
         while True:
             A_H = MaxModel(H)
             if A_H is None:
                 return implicants, implicates
             A_F = set(Map(A_H))
             if not And(A_F | {F_neg}).satisfiable():
-                # assert And(A_F).implies(F)
                 I_n = ReduceImplicant(A_F, F)
                 implicants.add(I_n)
-                b = {Var((v.name, v.true), False)  # type: ignore
+                b = {Var((v.name, v.true), False)
                      for v in I_n.children}
             else:
-                # assert F.implies(And(A_F).negate())
                 I_e = ReduceImplicate(A_F, F)
                 implicates.add(I_e)
-                b = {Var((v.name, v.true), True)  # type: ignore
+                b = {Var((v.name, v.true), True)
                      for v in I_e.children}
             H = And(H.children | {Or(b)})
 
-    def implicants(self) -> 'Or':
+    def implicants(self) -> 'Or[And[Var]]':
         """Extract the prime implicants of the sentence.
 
         Prime implicants are the minimal terms that imply the sentence. This
@@ -773,7 +778,7 @@ class NNF(metaclass=abc.ABCMeta):
         """
         return Or(self._do_PI()[0])
 
-    def implicates(self) -> 'And':
+    def implicates(self) -> 'And[Or[Var]]':
         """Extract the prime implicates of the sentence.
 
         Prime implicates are the minimal implied clauses. This method
@@ -784,7 +789,7 @@ class NNF(metaclass=abc.ABCMeta):
         """
         return And(self._do_PI()[1])
 
-    def to_MODS(self) -> 'NNF':
+    def to_MODS(self) -> 'Or[And[Var]]':
         """Convert the sentence to a MODS sentence."""
         return Or(And(Var(name, val)
                       for name, val in model.items())
@@ -824,7 +829,7 @@ class NNF(metaclass=abc.ABCMeta):
                     return true
                 return false
             elif isinstance(node, Internal):
-                new = node.__class__(map(cond, node.children))
+                new = node.map(cond)
                 if new != node:
                     return new
                 return node
@@ -836,7 +841,7 @@ class NNF(metaclass=abc.ABCMeta):
     def make_smooth(self) -> 'NNF':
         """Transform the sentence into an equivalent smooth sentence."""
         @memoize
-        def filler(name: Name) -> 'Or':
+        def filler(name: Name) -> 'Or[Var]':
             return Or({Var(name), Var(name, False)})
 
         @memoize
@@ -942,17 +947,15 @@ class NNF(metaclass=abc.ABCMeta):
                 # After simplification, there are >=2 children
                 a, *rest = node.children
                 if len(rest) == 1:
-                    return node.__class__(pair(child)
-                                          for child in node.children)
+                    return node.map(pair)
                 else:
-                    return node.__class__({pair(a),
-                                           pair(node.__class__(rest))})
+                    return type(node)({pair(a), pair(type(node)(rest))})
             else:
                 raise TypeError(node)
 
         return pair(sentence)
 
-    def deduplicate(self) -> 'NNF':
+    def deduplicate(self: T_NNF) -> T_NNF:
         """Return a copy of the sentence without any duplicate objects.
 
         If a node has multiple parents, it's possible for it to be
@@ -964,17 +967,15 @@ class NNF(metaclass=abc.ABCMeta):
         """
         new_nodes = {}  # type: t.Dict[NNF, NNF]
 
-        def recreate(node: NNF) -> NNF:
+        def recreate(node: U_NNF) -> U_NNF:
             if node not in new_nodes:
                 if isinstance(node, Var):
                     new_nodes[node] = node
                 elif isinstance(node, Or):
-                    new_nodes[node] = Or(recreate(child)
-                                         for child in node.children)
+                    new_nodes[node] = node.map(recreate)
                 elif isinstance(node, And):
-                    new_nodes[node] = And(recreate(child)
-                                          for child in node.children)
-            return new_nodes[node]
+                    new_nodes[node] = node.map(recreate)
+            return new_nodes[node]  # type: ignore
 
         return recreate(self)
 
@@ -1327,17 +1328,20 @@ class Var(NNF):
         def negate(self) -> 'Var':
             ...
 
+        def make_smooth(self) -> 'Var':
+            ...
 
-class Internal(NNF):
+
+class Internal(NNF, t.Generic[T_NNF_co]):
     """Base class for internal nodes, i.e. And and Or nodes."""
     __slots__ = ('children',)
 
     if t.TYPE_CHECKING:
-        def __init__(self, children: t.Iterable[NNF] = ()) -> None:
+        def __init__(self, children: t.Iterable[T_NNF_co] = ()) -> None:
             # For the typechecker
             self.children = frozenset(children)
     else:
-        def __init__(self, children: t.Iterable[NNF] = ()) -> None:
+        def __init__(self, children: t.Iterable[T_NNF_co] = ()) -> None:
             # For immutability
             object.__setattr__(self, 'children', frozenset(children))
 
@@ -1385,8 +1389,12 @@ class Internal(NNF):
         return (True, self.height(), len(self.children),
                 self.__class__.__name__, sorted(self.children, reverse=True))
 
+    def map(self, func: t.Callable[[T_NNF_co], U_NNF]) -> 'Internal[U_NNF]':
+        """Apply ``func`` to all of the node's children."""
+        return type(self)(func(child) for child in self.children)
 
-class And(Internal):
+
+class And(Internal[T_NNF_co]):
     """Conjunction nodes, which are only true if all of their children are."""
     __slots__ = ()
 
@@ -1401,11 +1409,20 @@ class And(Internal):
         return super().__repr__()
 
     if t.TYPE_CHECKING:
-        def negate(self) -> 'Or':
+        def negate(self) -> 'Or[NNF]':
+            ...
+
+        def condition(self, model: Model) -> 'And[NNF]':
+            ...
+
+        def make_smooth(self) -> 'And[NNF]':
+            ...
+
+        def map(self, func: t.Callable[[T_NNF_co], U_NNF]) -> 'And[U_NNF]':
             ...
 
 
-class Or(Internal):
+class Or(Internal[T_NNF_co]):
     """Disjunction nodes, which are true if any of their children are."""
     __slots__ = ()
 
@@ -1459,24 +1476,37 @@ class Or(Internal):
         return super().__repr__()
 
     if t.TYPE_CHECKING:
-        def negate(self) -> 'And':
+        def negate(self) -> 'And[NNF]':
+            ...
+
+        def condition(self, model: Model) -> 'Or[NNF]':
+            ...
+
+        def make_smooth(self) -> 'Or[NNF]':
+            ...
+
+        def map(self, func: t.Callable[[T_NNF_co], U_NNF]) -> 'Or[U_NNF]':
             ...
 
 
-def decision(var: Var, if_true: NNF, if_false: NNF) -> Or:
+def decision(
+        var: Var,
+        if_true: T_NNF,
+        if_false: U_NNF
+) -> Or[t.Union[And[t.Union[Var, T_NNF]], And[t.Union[Var, U_NNF]]]]:
     """Create a decision node with a variable and two branches.
 
     :param var: The variable node to decide on.
     :param if_true: The branch if the decision is true.
     :param if_false: The branch if the decision is false.
     """
-    return Or({And({var, if_true}), And({~var, if_false})})
+    return (var & if_true) | (~var & if_false)
 
 
 #: A node that's always true. Technically an And node without children.
-true = And()
+true = And()  # type: And[NNF]
 #: A node that's always false. Technically an Or node without children.
-false = Or()
+false = Or()  # type: Or[NNF]
 
 
 class Builder:
@@ -1500,7 +1530,7 @@ class Builder:
     should be done with ``builder.Var(name, False)`` or they won't be
     deduplicated.
     """
-    def __init__(self, seed: t.Iterable[NNF] = ()):
+    def __init__(self, seed: t.Iterable[NNF] = ()) -> None:
         """:param seed: Nodes to store for reuse in advance."""
         self.stored = {true: true, false: false}  # type: t.Dict[NNF, NNF]
         for node in seed:
@@ -1512,10 +1542,10 @@ class Builder:
         ret = Var(name, true)
         return self.stored.setdefault(ret, ret)  # type: ignore
 
-    def And(self, children: t.Iterable[NNF] = ()) -> 'nnf.And':
+    def And(self, children: t.Iterable[T_NNF] = ()) -> 'nnf.And[T_NNF]':
         ret = And(children)
         return self.stored.setdefault(ret, ret)  # type: ignore
 
-    def Or(self, children: t.Iterable[NNF] = ()) -> 'nnf.Or':
+    def Or(self, children: t.Iterable[T_NNF] = ()) -> 'nnf.Or[T_NNF]':
         ret = Or(children)
         return self.stored.setdefault(ret, ret)  # type: ignore
