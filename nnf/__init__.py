@@ -1393,6 +1393,30 @@ class Internal(NNF, t.Generic[T_NNF_co]):
         """Apply ``func`` to all of the node's children."""
         return type(self)(func(child) for child in self.children)
 
+    def __iter__(self) -> t.Iterator[T_NNF_co]:
+        """A shortcut for iterating over a node's children.
+
+        This makes some code more natural, e.g.
+        ``for implicant in node.implicants(): ...``
+        """
+        return iter(self.children)
+
+    def __len__(self) -> int:
+        """A shorcut for checking how many children a node has."""
+        return len(self.children)
+
+    def __contains__(self, item: NNF) -> bool:
+        """A shorcut for checking if a node has a child."""
+        return item in self.children
+
+    def __bool__(self) -> bool:
+        """Override the default behavior of empty nodes being ``False``.
+
+        That would mean that ``bool(nnf.false) == bool(nnf.true) == False``,
+        which is unreasonable. All nodes are truthy instead.
+        """
+        return True
+
 
 class And(Internal[T_NNF_co]):
     """Conjunction nodes, which are only true if all of their children are."""
