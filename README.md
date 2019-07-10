@@ -76,3 +76,9 @@ parsing its output format and for invoking the compiler.
 
 `nnf.amc` has a basic implementation of
 [Algebraic Model Counting](https://arxiv.org/abs/1211.4475).
+
+# Command line interface
+
+Some functionality is available through a command line interface, including a
+(slow) SAT solver and a sentence visualizer. For more information, see
+[the documentation](https://python-nnf.readthedocs.io/en/stable/cli.html).
