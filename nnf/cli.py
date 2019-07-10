@@ -207,11 +207,11 @@ def draw(args: argparse.Namespace) -> int:
 
     ext = extension(args.out)
     if ext in dot_formats or args.format is not None:
+        argv = ['dot', '-T' + (ext if args.format is None  # type: ignore
+                               else args.format)]
+        if args.out != '-':
+            argv.append('-o' + args.out)
         try:
-            argv = ['dot', '-T' + (ext if args.format is None
-                                   else args.format)]
-            if args.out != '-':
-                argv.append('-o' + args.out)
             proc = subprocess.Popen(argv, stdin=subprocess.PIPE,
                                     universal_newlines=True)
         except FileNotFoundError:
