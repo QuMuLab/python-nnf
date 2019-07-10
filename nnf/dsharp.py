@@ -25,13 +25,24 @@ import subprocess
 import tempfile
 import typing as t
 
-from nnf import NNF, And, Or, Var, false, dimacs
+from nnf import NNF, And, Or, Var, false, dimacs, Name
 
 __all__ = ('load', 'loads', 'compile')
 
 
-def load(fp: t.TextIO) -> NNF:
-    """Load a sentence from an open file."""
+def load(
+        fp: t.TextIO, var_labels: t.Optional[t.Dict[int, Name]] = None
+) -> NNF:
+    """Load a sentence from an open file.
+
+    An optional ``var_labels`` dictionary can map integers to other names.
+    """
+
+    def decode_name(num: int) -> Name:
+        if var_labels is not None:
+            return var_labels[num]
+        return num
+
     fmt, nodecount, edges, varcount = fp.readline().split()
     node_specs = dict(enumerate(line.split() for line in fp))
     assert fmt == 'nnf'
@@ -39,9 +50,9 @@ def load(fp: t.TextIO) -> NNF:
     for num, spec in node_specs.items():
         if spec[0] == 'L':
             if spec[1].startswith('-'):
-                nodes[num] = Var(int(spec[1][1:]), False)
+                nodes[num] = Var(decode_name(int(spec[1][1:])), False)
             else:
-                nodes[num] = Var(int(spec[1]))
+                nodes[num] = Var(decode_name(int(spec[1])))
         elif spec[0] == 'A':
             nodes[num] = And(nodes[int(n)] for n in spec[2:])
         elif spec[0] == 'O':
@@ -53,9 +64,9 @@ def load(fp: t.TextIO) -> NNF:
     return nodes[int(nodecount) - 1]
 
 
-def loads(s: str) -> NNF:
+def loads(s: str, var_labels: t.Optional[t.Dict[int, Name]] = None) -> NNF:
     """Load a sentence from a string."""
-    return load(io.StringIO(s))
+    return load(io.StringIO(s), var_labels)
 
 
 def compile(
@@ -86,10 +97,13 @@ def compile(
     if not sentence.is_CNF():
         raise ValueError("Sentence must be in CNF")
 
+    var_labels = dict(enumerate(sentence.vars(), start=1))
+    var_labels_inverse = {v: k for k, v in var_labels.items()}
+
     infd, infname = tempfile.mkstemp(text=True)
     try:
         with open(infd, 'w') as f:
-            dimacs.dump(sentence, f, mode='cnf')
+            dimacs.dump(sentence, f, mode='cnf', var_labels=var_labels_inverse)
         outfd, outfname = tempfile.mkstemp()
         try:
             os.close(outfd)
@@ -125,4 +139,4 @@ def compile(
     if not out:
         raise RuntimeError("Couldn't read file output. Log:\n\n{}".format(log))
 
-    return loads(out)
+    return loads(out, var_labels=var_labels)

@@ -197,6 +197,11 @@ def load(fp: t.TextIO) -> t.Union[NNF, And[Or[Var]]]:
                 return _load_cnf(fp)
             else:
                 raise ValueError("Unknown format '{}'".format(fmt))
+        elif line.startswith('nnf '):
+            # Might be a DSHARP output file
+            from nnf import dsharp
+            fp.seek(0)
+            return dsharp.load(fp)
         else:
             print(repr(line))
             raise ValueError(

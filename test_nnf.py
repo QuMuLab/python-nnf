@@ -712,3 +712,13 @@ if shutil.which('dsharp') is not None:
         if sentence.satisfiable():  # See nnf.dsharp.__doc__
             assert sentence.equivalent(compiled)
             assert sentence.equivalent(compiled_smooth)
+
+    @given(CNF())
+    def test_dsharp_compile_converting_names(sentence: And[Or[Var]]):
+        assume(all(len(clause) > 0 for clause in sentence))
+        sentence = And(Or(Var(str(var.name), var.true) for var in clause)
+                       for clause in sentence)
+        compiled = dsharp.compile(sentence)
+        assert all(isinstance(name, str) for name in compiled.vars())
+        if sentence.satisfiable():
+            assert sentence.equivalent(compiled)
