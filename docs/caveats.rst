@@ -1,5 +1,5 @@
-Caveats and warnings
-====================
+Caveats
+=======
 
 There are a few things to keep in mind when using ``python-nnf``.
 

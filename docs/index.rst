@@ -14,6 +14,7 @@ Welcome to ``python-nnf``'s documentation!
 
    install
    nnf
+   cli
    caveats
 
 Introduction

@@ -18,6 +18,11 @@ setuptools.setup(
     install_requires=[
         'typing;python_version<"3.5"',
     ],
+    entry_points={
+        'console_scripts': [
+            'pynnf = nnf.cli:main',
+        ],
+    },
     license="ISC",
     long_description=long_description,
     long_description_content_type="text/markdown",
