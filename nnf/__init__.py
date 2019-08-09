@@ -1254,6 +1254,13 @@ class NNF(metaclass=abc.ABCMeta):
             return NotImplemented
         return self._sorting_key() >= other._sorting_key()
 
+    def __copy__(self: T_NNF) -> T_NNF:
+        # Nodes are immutable, so this is ok
+        return self
+
+    def __deepcopy__(self: T_NNF, memodict: t.Dict[t.Any, t.Any]) -> T_NNF:
+        return self
+
 
 class Var(NNF):
     """A variable, or its negation.
@@ -1332,6 +1339,13 @@ class Var(NNF):
 
         def make_smooth(self) -> 'Var':
             ...
+
+    def __getstate__(self) -> t.Tuple[Name, bool]:
+        return self.name, self.true
+
+    def __setstate__(self, state: t.Tuple[Name, bool]) -> None:
+        object.__setattr__(self, 'name', state[0])
+        object.__setattr__(self, 'true', state[1])
 
 
 class Internal(NNF, t.Generic[T_NNF_co]):
@@ -1418,6 +1432,12 @@ class Internal(NNF, t.Generic[T_NNF_co]):
         which is unreasonable. All nodes are truthy instead.
         """
         return True
+
+    def __getstate__(self) -> t.FrozenSet[T_NNF_co]:
+        return self.children
+
+    def __setstate__(self, state: t.FrozenSet[T_NNF_co]) -> None:
+        object.__setattr__(self, 'children', state)
 
 
 class And(Internal[T_NNF_co]):

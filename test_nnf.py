@@ -1,3 +1,5 @@
+import copy
+import pickle
 import shutil
 import os
 
@@ -694,6 +696,20 @@ def test_iff(a: nnf.NNF, b: nnf.NNF):
     for model in nnf.all_models(c.vars()):
         assert ((a.satisfied_by(model) == b.satisfied_by(model)) ==
                 c.satisfied_by(model))
+
+
+@given(NNF())
+def test_pickling(sentence: nnf.NNF):
+    new = pickle.loads(pickle.dumps(sentence))
+    assert sentence == new
+    assert sentence is not new
+    assert sentence.object_count() == new.object_count()
+
+
+@given(NNF())
+def test_copying_does_not_copy(sentence: nnf.NNF):
+    assert sentence is copy.copy(sentence) is copy.deepcopy(sentence)
+    assert copy.deepcopy([sentence])[0] is sentence
 
 
 if shutil.which('dsharp') is not None:
