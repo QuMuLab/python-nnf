@@ -79,6 +79,6 @@ parsing its output format and for invoking the compiler.
 
 # Command line interface
 
-Some functionality is available through a command line interface, including a
+Some functionality is available through a command line tool, `pynnf`, including a
 (slow) SAT solver and a sentence visualizer. For more information, see
 [the documentation](https://python-nnf.readthedocs.io/en/stable/cli.html).
