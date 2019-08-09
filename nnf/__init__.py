@@ -709,15 +709,17 @@ class NNF(metaclass=abc.ABCMeta):
         In: Twenty-Fourth International Joint Conference on Artificial
         Intelligence. 2015.
         """
+        Model = t.Dict[t.Tuple[Name, bool], bool]
+
         def MaxModel(sentence: And[Or[Var]]) -> t.Optional[Model]:
             try:
-                return max(sentence._cnf_models(),
+                return max(sentence._cnf_models(),  # type: ignore
                            key=lambda model: sum(model.values()))
             except ValueError:
                 return None
 
         def Map(model: Model) -> t.Iterator[Var]:
-            for (var, truthness), value in model.items():  # type: ignore
+            for (var, truthness), value in model.items():
                 if value:
                     yield Var(var, truthness)
 
