@@ -12,7 +12,7 @@ import nnf
 
 from nnf import Var, And, Or, amc, dimacs, dsharp, operators
 
-settings.register_profile('patient', deadline=1000,
+settings.register_profile('patient', deadline=2000,
                           suppress_health_check=(HealthCheck.too_slow,))
 settings.load_profile('patient')
 
@@ -606,6 +606,12 @@ def test_implicates_implicants_idempotent(sentence: nnf.NNF):
     assert implicates.implicates() == implicates
     assert implicants.implicates() == implicates
     assert implicates.implicants() == implicants
+
+
+@given(NNF())
+def test_implicates_implicants_negation_rule(sentence: nnf.NNF):
+    assert sentence.negate().implicants().negate() == sentence.implicates()
+    assert sentence.negate().implicates().negate() == sentence.implicants()
 
 
 @given(NNF(), NNF())
