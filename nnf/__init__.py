@@ -393,7 +393,7 @@ class NNF(metaclass=abc.ABCMeta):
             cnf = self.is_CNF()
         if cnf:
             yield from self._cnf_models()
-        elif deterministic or self.is_DNF():
+        elif deterministic:
             yield from self._models_deterministic(decomposable=decomposable)
         elif decomposable:
             yield from self._models_decomposable()
