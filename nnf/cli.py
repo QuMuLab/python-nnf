@@ -218,6 +218,7 @@ def draw(args: argparse.Namespace) -> int:
             print("Can't find `dot` executable. Is it installed and in your "
                   "PATH?")
             return 1
+        assert proc.stdin
         proc.stdin.write(dot)
         proc.stdin.close()
         ret = proc.wait()

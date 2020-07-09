@@ -1407,7 +1407,8 @@ class Internal(NNF, t.Generic[T_NNF_co]):
 
     def map(self, func: t.Callable[[T_NNF_co], U_NNF]) -> 'Internal[U_NNF]':
         """Apply ``func`` to all of the node's children."""
-        return type(self)(func(child) for child in self.children)
+        return type(self)(func(child)  # type: ignore
+                          for child in self.children)
 
     def __iter__(self) -> t.Iterator[T_NNF_co]:
         """A shortcut for iterating over a node's children.
