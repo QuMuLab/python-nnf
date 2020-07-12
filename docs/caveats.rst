@@ -55,4 +55,4 @@ Other duplication inefficiencies
 
 Even when properly deduplicated, the kind of sentence that's vulnerable to node duplication might still be inefficient to work with for some operations.
 
-A known offender is equality (``==``). Currently, if two of such sentences are compared that are equal but don't share any objects, it takes a very long time even both sentences don't have any duplication within themselves.
+A known offender is equality (``==``). Currently, if two of such sentences are compared that are equal but don't share any objects, it takes a very long time even if both sentences don't have any duplication within themselves.
