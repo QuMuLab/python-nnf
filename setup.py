@@ -9,7 +9,7 @@ setuptools.setup(
     author="Jan Verbeek",
     author_email="jan.verbeek@posteo.nl",
     description="Manipulate NNF (Negation Normal Form) logical sentences",
-    url="https://github.com/blyxxyz/python-nnf",
+    url="https://github.com/QuMuLab/python-nnf",
     packages=setuptools.find_packages(),
     package_data={
         'nnf': ['py.typed'],  # Mark package as having inline types
@@ -44,6 +44,6 @@ setuptools.setup(
     keywords="logic nnf dimacs dsharp",
     project_urls={
         'Documentation': "https://python-nnf.readthedocs.io/",
-        'Source': "https://github.com/blyxxyz/python-nnf",
+        'Source': "https://github.com/QuMuLab/python-nnf",
     },
 )
