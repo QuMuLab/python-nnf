@@ -1,4 +1,4 @@
-"""Interoperability with `DSHARP <https://bitbucket.org/haz/dsharp>`_.
+"""Interoperability with `DSHARP <https://github.com/QuMuLab/dsharp>`_.
 
 ``load`` and ``loads`` can be used to parse files created by DSHARP's
 ``-Fnnf`` option.

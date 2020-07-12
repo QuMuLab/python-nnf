@@ -48,7 +48,7 @@ Decomposability is automatically detected. However, you can skip the check if yo
 
 Determinism is too expensive to automatically detect, but it can give a huge speedup. If you know a sentence to be deterministic, pass ``deterministic=True`` as a keyword argument to take advantage.
 
-A compiler like `DSHARP <https://bitbucket.org/haz/dsharp>`_ may be able to convert some sentences into equivalent deterministic decomposable sentences. The output of DSHARP can be loaded using the :mod:`nnf.dsharp` module.
+A compiler like `DSHARP <https://github.com/QuMuLab/dsharp>`_ may be able to convert some sentences into equivalent deterministic decomposable sentences. The output of DSHARP can be loaded using the :mod:`nnf.dsharp` module.
 
 Other duplication inefficiencies
 --------------------------------
