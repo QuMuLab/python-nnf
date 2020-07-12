@@ -82,3 +82,10 @@ parsing its output format and for invoking the compiler.
 Some functionality is available through a command line tool, `pynnf`, including a
 (slow) SAT solver and a sentence visualizer. For more information, see
 [the documentation](https://python-nnf.readthedocs.io/en/stable/cli.html).
+
+# Credits
+
+`python-nnf` up to version 0.2.1 was created by [Jan Verbeek](https://github.com/blyxxyz)
+under mentorship of [Ronald de Haan](https://staff.science.uva.nl/r.dehaan/)
+at the [University of Amsterdam](https://www.uva.nl/). It was the subject of an
+undergraduate thesis, [*Developing a Python Package for Reasoning with NNF Sentences*](https://scripties.uba.uva.nl/scriptie/691650).
