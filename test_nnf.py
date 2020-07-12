@@ -619,7 +619,7 @@ def test_implicates_implicants_negation_rule(sentence: nnf.NNF):
     assert sentence.negate().implicates().negate() == sentence.implicants()
 
 
-@pytest.mark.xfail
+@pytest.mark.xfail(strict=True)
 def test_implicates_implicants_negation_rule_example():
     sentence = Or({And({~Var(1), Var(2)}), And({~Var(3), Var(1)})})
     assert sentence.negate().implicants().negate() == sentence.implicates()
