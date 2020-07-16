@@ -1367,7 +1367,7 @@ class Internal(NNF, t.Generic[T_NNF_co]):
         return NotImplemented
 
     def __hash__(self) -> int:
-        return hash((self.children,))
+        return hash((self.__class__, self.children))
 
     def __setattr__(self, key: str, value: object) -> None:
         raise TypeError("{} objects are immutable"
