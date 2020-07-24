@@ -238,7 +238,7 @@ class NNF(metaclass=abc.ABCMeta):
         """Some set of values exists that makes the sentence correct.
 
         This method doesn't necessarily try to find an example, which can
-        make it faster. It's decent at decomposable sentence and sentences in
+        make it faster. It's decent at decomposable sentences and sentences in
         CNF, and bad at other sentences.
 
         :param decomposable: Indicate whether the sentence is decomposable. By
