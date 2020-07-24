@@ -12,7 +12,7 @@ from hypothesis import (assume, event, given, strategies as st, settings,
 
 import nnf
 
-from nnf import Var, And, Or, amc, dimacs, dsharp, operators
+from nnf import Var, And, Or, amc, dimacs, dsharp, operators, true, false, tseitin
 
 settings.register_profile('patient', deadline=2000,
                           suppress_health_check=(HealthCheck.too_slow,))
@@ -754,3 +754,24 @@ if shutil.which('dsharp') is not None:
         assert all(isinstance(name, str) for name in compiled.vars())
         if sentence.satisfiable():
             assert sentence.equivalent(compiled)
+
+
+@given(NNF())
+def test_tseitin(sentence: nnf.NNF):
+    sentence = sentence.simplify()
+    assume(len(sentence.vars()) <= 6)
+    assume(len(sentence.vars()) >= 2)
+
+    T = sentence.simplify()
+    T = tseitin.to_cnf(T)
+
+    # TODO: Once forgetting/projection is implemented, do this more complete check
+    # aux = filter(lambda x: 'aux' in str(x.name), T.vars())
+    # assert T.forget(aux).equivalent(sentence)
+
+    if not (T in [true, false] or isinstance(T, Var)):
+        for mt in T.models():
+            ms = {k:v for (k,v) in mt.items() if k in sentence.vars()}
+            assert sentence.satisfied_by(ms)
+
+    assert T.model_count() == sentence.model_count()
