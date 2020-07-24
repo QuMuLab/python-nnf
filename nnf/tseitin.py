@@ -8,6 +8,12 @@ polynomial time/space. It does so at the cost of introducing new variables
 from nnf import NNF, Var, And, Or, Name, true, false
 
 def to_cnf(theory: NNF) -> NNF:
+    """Convert an NNF into CNF using the Tseitin Encoding.
+
+    Assumes that the theory is simplified.
+
+    :param theory: Theory to convert.
+    """
 
     node_to_var = {}
     clauses = []
@@ -31,7 +37,7 @@ def to_cnf(theory: NNF) -> NNF:
                 clauses.append(Or([~aux, c]))
 
         elif isinstance(node, Or):
-            clauses.append(Or(list(children)+[~aux]))
+            clauses.append(Or(list(children) + [~aux]))
             for c in children:
                 clauses.append(Or([~c, aux]))
 
