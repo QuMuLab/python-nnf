@@ -14,7 +14,7 @@ from nnf import NNF, Var, And, Or, memoize, Internal
 aux_count = 0
 
 
-def Aux():
+def Aux() -> Var:
     global aux_count
     aux_count += 1
     return Var("aux_%d" % aux_count)
