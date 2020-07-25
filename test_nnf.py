@@ -758,20 +758,17 @@ if shutil.which('dsharp') is not None:
 
 @given(NNF())
 def test_tseitin(sentence: nnf.NNF):
-    sentence = sentence.simplify()
-    assume(len(sentence.vars()) <= 6)
-    assume(len(sentence.vars()) >= 2)
 
-    T = sentence.simplify()
-    T = tseitin.to_cnf(T)
+    # Assumption to reduce the time in testing
+    assume(sentence.size() <= 10)
+
+    T = tseitin.to_CNF(sentence)
 
     # TODO: Once forgetting/projection is implemented, do this more complete check
     # aux = filter(lambda x: 'aux' in str(x.name), T.vars())
     # assert T.forget(aux).equivalent(sentence)
 
-    if not (T in [true, false] or isinstance(T, Var)):
-        for mt in T.models():
-            ms = {k:v for (k,v) in mt.items() if k in sentence.vars()}
-            assert sentence.satisfied_by(ms)
+    for mt in T.models():
+        assert sentence.satisfied_by(mt)
 
     assert T.model_count() == sentence.model_count()

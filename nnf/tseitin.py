@@ -1,13 +1,26 @@
-"""Transformations using the well-known Tseitin encoding <https://en.wikipedia.org/wiki/Tseytin_transformation>
+"""Transformations using the well-known Tseitin encoding
+<https://en.wikipedia.org/wiki/Tseytin_transformation>
 
 The Tseitin transformation converts any arbitrary circuit to one in CNF in
 polynomial time/space. It does so at the cost of introducing new variables
 (one for each logical connective in the formula).
 """
 
-from nnf import NNF, Var, And, Or, Name, true, false
+import typing as t
 
-def to_cnf(theory: NNF) -> NNF:
+from nnf import NNF, Var, And, Or, memoize, Internal
+
+
+aux_count = 0
+
+
+def Aux():
+    global aux_count
+    aux_count += 1
+    return Var("aux_%d" % aux_count)
+
+
+def to_CNF(theory: NNF) -> And[Or[Var]]:
     """Convert an NNF into CNF using the Tseitin Encoding.
 
     Assumes that the theory is simplified.
@@ -15,31 +28,28 @@ def to_cnf(theory: NNF) -> NNF:
     :param theory: Theory to convert.
     """
 
-    node_to_var = {}
-    clauses = []
+    clauses: t.List[Or[Var]] = []
 
-    def process_node(node: NNF) -> NNF:
-
-        if node in node_to_var:
-            return node
+    @memoize
+    def process_node(node: NNF) -> Var:
 
         if isinstance(node, Var):
-            node_to_var[node] = node
             return node
 
-        aux = Var("aux_%d" % len(node_to_var))
-        node_to_var[node] = aux
-        children = [process_node(c) for c in node.children]
+        assert isinstance(node, Internal)
+
+        aux = Aux()
+        children = {process_node(c) for c in node.children}
 
         if isinstance(node, And):
-            clauses.append(Or([~c for c in children] + [aux]))
+            clauses.append(Or({~c for c in children} | {aux}))
             for c in children:
-                clauses.append(Or([~aux, c]))
+                clauses.append(Or({~aux, c}))
 
         elif isinstance(node, Or):
-            clauses.append(Or(list(children) + [~aux]))
+            clauses.append(Or(children | {~aux}))
             for c in children:
-                clauses.append(Or([~c, aux]))
+                clauses.append(Or({~c, aux}))
 
         else:
             raise TypeError(node)
@@ -47,7 +57,6 @@ def to_cnf(theory: NNF) -> NNF:
         return aux
 
     root = process_node(theory)
-    clauses.append(root)
+    clauses.append(Or({root}))
 
     return And(clauses)
-
