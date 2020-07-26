@@ -685,7 +685,7 @@ def test_nor(a: nnf.NNF, b: nnf.NNF):
 
 
 @given(NNF(), NNF())
-def test_implies(a: nnf.NNF, b: nnf.NNF):
+def test_implies2(a: nnf.NNF, b: nnf.NNF):
     c = operators.implies(a, b)
     for model in nnf.all_models(c.vars()):
         assert ((a.satisfied_by(model) and not b.satisfied_by(model)) !=
