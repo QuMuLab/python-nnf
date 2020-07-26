@@ -6,8 +6,6 @@ polynomial time/space. It does so at the cost of introducing new variables
 (one for each logical connective in the formula).
 """
 
-import typing as t
-
 from nnf import NNF, Var, And, Or, memoize, Internal
 
 
