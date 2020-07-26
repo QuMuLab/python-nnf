@@ -28,7 +28,7 @@ def to_CNF(theory: NNF) -> And[Or[Var]]:
     :param theory: Theory to convert.
     """
 
-    clauses: t.List[Or[Var]] = []
+    clauses = []
 
     @memoize
     def process_node(node: NNF) -> Var:

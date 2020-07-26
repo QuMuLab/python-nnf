@@ -764,7 +764,8 @@ def test_tseitin(sentence: nnf.NNF):
 
     T = tseitin.to_CNF(sentence)
 
-    # TODO: Once forgetting/projection is implemented, do this more complete check
+    # TODO: Once forgetting/projection is implemented,
+    #       do this more complete check
     # aux = filter(lambda x: 'aux' in str(x.name), T.vars())
     # assert T.forget(aux).equivalent(sentence)
 
