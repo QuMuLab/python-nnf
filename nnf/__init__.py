@@ -18,7 +18,9 @@ import abc
 import functools
 import itertools
 import operator
+import os
 import typing as t
+import uuid
 
 from collections import Counter
 
@@ -1065,7 +1067,13 @@ class NNF(metaclass=abc.ABCMeta):
             if node not in names:
                 number = next(counter)
                 if isinstance(node, Var):
-                    label = str(node.name).replace('"', r'\"')
+                    if isinstance(node.name, Aux):
+                        # This matches the repr, but in this context it could
+                        # be reasonable to number them instead
+                        label = "<{}>".format(node.name.hex[:4])
+                    else:
+                        label = str(node.name)
+                    label = label.replace('"', r'\"')
                     color = colors['var']
                     if not node.true:
                         label = '¬' + label
@@ -1263,6 +1271,15 @@ class NNF(metaclass=abc.ABCMeta):
         return self
 
 
+class Aux(uuid.UUID):
+    """Unique UUID labels for auxiliary variables.
+
+    Don't instantiate directly, call :meth:`Var.aux` instead.
+    """
+
+    __slots__ = ()
+
+
 class Var(NNF):
     """A variable, or its negation.
 
@@ -1318,10 +1335,12 @@ class Var(NNF):
 
     def __repr__(self) -> str:
         if isinstance(self.name, str):
-            return str(self.name) if self.true else "~{}".format(self.name)
+            base = str(self.name)
+        elif isinstance(self.name, Aux):
+            base = "<{}>".format(self.name.hex[:4])
         else:
             base = "{}({!r})".format(self.__class__.__name__, self.name)
-            return base if self.true else '~' + base
+        return base if self.true else '~' + base
 
     def __invert__(self) -> 'Var':
         return Var(self.name, not self.true)
@@ -1347,6 +1366,12 @@ class Var(NNF):
     def __setstate__(self, state: t.Tuple[Name, bool]) -> None:
         object.__setattr__(self, 'name', state[0])
         object.__setattr__(self, 'true', state[1])
+
+    @staticmethod
+    def aux() -> 'Var':
+        """Create an auxiliary variable with a unique label."""
+        # See implementation of uuid.uuid4()
+        return Var(Aux(bytes=os.urandom(16), version=4))
 
 
 class Internal(NNF, t.Generic[T_NNF_co]):

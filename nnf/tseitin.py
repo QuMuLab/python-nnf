@@ -9,15 +9,6 @@ polynomial time/space. It does so at the cost of introducing new variables
 from nnf import NNF, Var, And, Or, memoize, Internal
 
 
-aux_count = 0
-
-
-def Aux() -> Var:
-    global aux_count
-    aux_count += 1
-    return Var("aux_%d" % aux_count)
-
-
 def to_CNF(theory: NNF, skip_simplification: bool = False) -> And[Or[Var]]:
     """Convert an NNF into CNF using the Tseitin Encoding.
 
@@ -35,7 +26,7 @@ def to_CNF(theory: NNF, skip_simplification: bool = False) -> And[Or[Var]]:
 
         assert isinstance(node, Internal)
 
-        aux = Aux()
+        aux = Var.aux()
         children = {process_node(c) for c in node.children}
 
         if isinstance(node, And):
