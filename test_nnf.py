@@ -610,20 +610,37 @@ def test_implicates_implicants_idempotent(sentence: nnf.NNF):
     assert implicates.implicants() == implicants
 
 
-# TODO: This test fails, see the example below.
-# I don't know if this is a bug in the test or in the implementation.
-@pytest.mark.xfail
 @given(NNF())
 def test_implicates_implicants_negation_rule(sentence: nnf.NNF):
-    assert sentence.negate().implicants().negate() == sentence.implicates()
-    assert sentence.negate().implicates().negate() == sentence.implicants()
+    """Any implicate is also a negated implicant of the negated sentence.
+
+    .implicates() gives some implicates, and .implicants() gives all
+    implicants.
+
+    So sentence.negate().implicants().negate() gives all implicates,
+    and sentence.negate().implicates().negate() gives some implicants.
+    """
+    assert (
+        sentence.negate().implicants().negate().children
+        >= sentence.implicates().children
+    )
+    assert (
+        sentence.negate().implicates().negate().children
+        <= sentence.implicants().children
+    )
 
 
-@pytest.mark.xfail(strict=True)
 def test_implicates_implicants_negation_rule_example():
+    """These failed an old version of the previous test. See issue #3."""
     sentence = Or({And({~Var(1), Var(2)}), And({~Var(3), Var(1)})})
-    assert sentence.negate().implicants().negate() == sentence.implicates()
-    assert sentence.negate().implicates().negate() == sentence.implicants()
+    assert (
+        sentence.negate().implicants().negate().children
+        >= sentence.implicates().children
+    )
+    assert (
+        sentence.negate().implicates().negate().children
+        <= sentence.implicants().children
+    )
 
 
 @given(NNF(), NNF())

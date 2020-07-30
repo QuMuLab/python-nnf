@@ -781,13 +781,16 @@ class NNF(metaclass=abc.ABCMeta):
         return Or(self._do_PI()[0])
 
     def implicates(self) -> 'And[Or[Var]]':
-        """Extract the prime implicates of the sentence.
+        """Extract a prime implicate cover of the sentence.
 
         Prime implicates are the minimal implied clauses. This method
         returns a conjunction of clauses that's equivalent to the original
         sentence, and minimal, meaning that there are no clauses implied by
         the sentence that are strict subsets of any of the clauses in this
         representation, so no clauses could be made smaller.
+
+        While :meth:`NNF.implicants` returns all implicants, this method may
+        only return some of the implicates.
         """
         return And(self._do_PI()[1])
 
