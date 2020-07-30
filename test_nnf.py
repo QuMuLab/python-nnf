@@ -763,6 +763,10 @@ def test_tseitin(sentence: nnf.NNF):
     assume(sentence.size() <= 10)
 
     T = tseitin.to_CNF(sentence)
+    assert T.is_CNF()
+
+    # Only do the following checks when we haven't simplified away some vars
+    assume(sentence.vars() <= T.vars())
 
     # TODO: Once forgetting/projection is implemented,
     #       do this more complete check

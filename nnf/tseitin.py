@@ -9,11 +9,10 @@ polynomial time/space. It does so at the cost of introducing new variables
 from nnf import NNF, Var, And, Or, memoize, Internal
 
 
-def to_CNF(theory: NNF, skip_simplification: bool = False) -> And[Or[Var]]:
+def to_CNF(theory: NNF) -> And[Or[Var]]:
     """Convert an NNF into CNF using the Tseitin Encoding.
 
     :param theory: Theory to convert.
-    :param skip_simplification: If true, the final CNF will not be simplified
     """
 
     clauses = []
@@ -29,7 +28,13 @@ def to_CNF(theory: NNF, skip_simplification: bool = False) -> And[Or[Var]]:
         aux = Var.aux()
         children = {process_node(c) for c in node.children}
 
-        if isinstance(node, And):
+        if any(~var in children for var in children):
+            if isinstance(node, And):
+                clauses.append(Or({~aux}))
+            else:
+                clauses.append(Or({aux}))
+
+        elif isinstance(node, And):
             clauses.append(Or({~c for c in children} | {aux}))
             for c in children:
                 clauses.append(Or({~aux, c}))
@@ -46,9 +51,4 @@ def to_CNF(theory: NNF, skip_simplification: bool = False) -> And[Or[Var]]:
 
     root = process_node(theory)
     clauses.append(Or({root}))
-    theory = And(clauses)
-
-    if skip_simplification:
-        return theory
-    else:
-        return theory.simplify()
+    return And(clauses)
