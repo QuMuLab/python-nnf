@@ -12,7 +12,8 @@ from hypothesis import (assume, event, given, strategies as st, settings,
 
 import nnf
 
-from nnf import Var, And, Or, amc, dimacs, dsharp, operators, tseitin
+from nnf import Var, And, Or, amc, dimacs, dsharp, operators, \
+                tseitin, complete_models
 
 settings.register_profile('patient', deadline=2000,
                           suppress_health_check=(HealthCheck.too_slow,))
@@ -766,14 +767,24 @@ def test_tseitin(sentence: nnf.NNF):
     assert T.is_CNF()
 
     # Only do the following checks when we haven't simplified away some vars
-    assume(sentence.vars() <= T.vars())
+    # assume(sentence.vars() <= T.vars())
 
     # TODO: Once forgetting/projection is implemented,
     #       do this more complete check
     # aux = filter(lambda x: 'aux' in str(x.name), T.vars())
     # assert T.forget(aux).equivalent(sentence)
 
+    models = list(complete_models(T.models(), sentence.vars() | T.vars()))
+
     for mt in T.models():
         assert sentence.satisfied_by(mt)
 
     assert T.model_count() == sentence.model_count()
+
+@given(models())
+def test_complete_models(model: nnf.And[nnf.Var]):
+    t0, t1, t2 = [], ['test1'], ['test1', 'test2']
+    m = {v.name: v.true for v in model}
+    assert 1 == len(list(complete_models([m], list(m.keys())+t0)))
+    assert 2 == len(list(complete_models([m], list(m.keys())+t1)))
+    assert 4 == len(list(complete_models([m], list(m.keys())+t2)))

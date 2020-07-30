@@ -590,7 +590,7 @@ class NNF(metaclass=abc.ABCMeta):
 
         return neg(self)
 
-    def to_CNF(self: T_NNF) -> 'And[Or[Var]]':
+    def to_CNF(self) -> 'And[Or[Var]]':
         """Compile theory to a semantically equivalent CNF formula."""
         from nnf import tseitin
         return tseitin.to_CNF(self)
@@ -1565,6 +1565,20 @@ class Or(Internal[T_NNF_co]):
 
         def map(self, func: t.Callable[[T_NNF_co], U_NNF]) -> 'Or[U_NNF]':
             ...
+
+
+def complete_models(
+        models: t.Iterable[Model],
+        names: t.FrozenSet[Name]
+) -> t.Iterator[Model]:
+    diff = None
+    for model in models:
+        if diff is None:
+            diff = names - model.keys()
+        for supplement in all_models(diff):
+            new = model.copy()
+            new.update(supplement)
+            yield new
 
 
 def decision(
