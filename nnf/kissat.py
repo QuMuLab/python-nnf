@@ -3,16 +3,14 @@
 ``solve`` invokes the SAT solver directly on the given theory.
 """
 
-import io
 import os
 import subprocess
 import tempfile
 import typing as t
 
-from nnf import NNF, And, Or, Var, dimacs, Model
+from nnf import And, Or, Var, dimacs, Model
 
 __all__ = ('solve')
-
 
 
 def solve(
@@ -29,7 +27,7 @@ def solve(
         raise ValueError("Sentence must be in CNF")
 
     SOLVER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            'bin', 'kissat')
+                        'bin', 'kissat')
     assert os.path.isfile(SOLVER), "Cannot seem to find kissat solver."
 
     args = [SOLVER] + extra_args
@@ -66,10 +64,13 @@ def solve(
     if 's SATISFIABLE' not in log:
         raise RuntimeError("Something went wrong. Log:\n\n{}".format(log))
 
+    log = [line.strip() for line in log.split('\n')]
 
-    model = log.split('\nv ')[1].split('\n')[0] # Line that starts with 'v ...'
-    model = model[:-2] # Strip off the final '0'
-    model = map(int, model.strip().split(' ')) # Individual numbered literals
-    model = {var_labels_inverse[abs(lit)]: lit>0 for lit in model}
+    model = [line[2:] for line in log if line[:2] == 'v ']  # Variable lines
+    model = ' '.join(model).split(' ')  # Combine lines and split out literals
+    assert '0' == model[-1], "Error: Last entry should be a 0\n%s" % str(model)
+    model = model[:-1]
+    model = map(int, model)  # Individual numbered literals
+    model = {var_labels[abs(lit)]: lit > 0 for lit in model}
 
     return model
