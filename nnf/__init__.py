@@ -32,7 +32,7 @@ Model = t.Dict[Name, bool]
 
 __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Aux', 'Builder',
            'all_models', 'complete_models', 'decision', 'true', 'false',
-           'dsharp', 'dimacs', 'amc', 'tseitin', 'operators')
+           'dsharp', 'dimacs', 'amc', 'kissat', 'tseitin', 'operators')
 
 
 def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
@@ -264,10 +264,9 @@ class NNF(metaclass=abc.ABCMeta):
 
         if cnf:
             return self._cnf_satisfiable()
-
-        # todo: use a better fallback
-        return any(self.satisfied_by(model)
-                   for model in all_models(self.vars()))
+        else:
+            from nnf import tseitin
+            return tseitin.to_CNF(self)._cnf_satisfiable()
 
     def _satisfiable_decomposable(self) -> bool:
         """Checks satisfiability of decomposable sentences.
@@ -596,6 +595,11 @@ class NNF(metaclass=abc.ABCMeta):
         return tseitin.to_CNF(self)
 
     def _cnf_satisfiable(self) -> bool:
+        """Call a SAT solver (kissat) on the presumed CNF theory."""
+        from nnf import kissat
+        return kissat.solve(self) is not None
+
+    def _cnf_satisfiable_native(self) -> bool:
         """A naive DPLL SAT solver."""
         def DPLL(clauses: t.FrozenSet[t.FrozenSet[Var]]) -> bool:
             if not clauses:
