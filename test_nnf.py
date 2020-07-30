@@ -12,7 +12,7 @@ from hypothesis import (assume, event, given, strategies as st, settings,
 
 import nnf
 
-from nnf import Var, And, Or, amc, dimacs, dsharp, operators, true, false, tseitin
+from nnf import Var, And, Or, amc, dimacs, dsharp, operators, tseitin
 
 settings.register_profile('patient', deadline=2000,
                           suppress_health_check=(HealthCheck.too_slow,))
