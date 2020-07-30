@@ -129,7 +129,11 @@ def models(draw):
 
 @st.composite
 def MODS(draw):
-    return Or(draw(st.frozensets(models())))
+    num = draw(st.integers(min_value=1, max_value=9))
+    amount = draw(st.integers(min_value=0, max_value=10))
+    return Or(And(Var(name, draw(st.booleans()))
+                  for name in range(1, num))
+              for _ in range(amount))
 
 
 @st.composite
