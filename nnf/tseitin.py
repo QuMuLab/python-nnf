@@ -18,12 +18,11 @@ def Aux() -> Var:
     return Var("aux_%d" % aux_count)
 
 
-def to_CNF(theory: NNF) -> And[Or[Var]]:
+def to_CNF(theory: NNF, skip_simplification: bool = False) -> And[Or[Var]]:
     """Convert an NNF into CNF using the Tseitin Encoding.
 
-    Assumes that the theory is simplified.
-
     :param theory: Theory to convert.
+    :param skip_simplification: If true, the final CNF will not be simplified
     """
 
     clauses = []
@@ -56,5 +55,9 @@ def to_CNF(theory: NNF) -> And[Or[Var]]:
 
     root = process_node(theory)
     clauses.append(Or({root}))
+    theory = And(clauses)
 
-    return And(clauses)
+    if skip_simplification:
+        return theory
+    else:
+        return theory.simplify()
