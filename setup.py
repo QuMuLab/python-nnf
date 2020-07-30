@@ -47,4 +47,5 @@ setuptools.setup(
         'Source': "https://github.com/QuMuLab/python-nnf",
     },
     include_package_data=True,
+    zip_safe=False,
 )
