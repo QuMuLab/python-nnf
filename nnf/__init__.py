@@ -590,6 +590,11 @@ class NNF(metaclass=abc.ABCMeta):
 
         return neg(self)
 
+    def to_CNF(self: T_NNF) -> 'And[Or[Var]]':
+        """Compile theory to a semantically equivalent CNF formula."""
+        from nnf import tseitin
+        return tseitin.to_CNF(self)
+
     def _cnf_satisfiable(self) -> bool:
         """A naive DPLL SAT solver."""
         def DPLL(clauses: t.FrozenSet[t.FrozenSet[Var]]) -> bool:
