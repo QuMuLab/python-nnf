@@ -12,8 +12,8 @@ from hypothesis import (assume, event, given, strategies as st, settings,
 
 import nnf
 
-from nnf import Var, And, Or, amc, dimacs, dsharp, operators, \
-                tseitin, complete_models
+from nnf import (Var, And, Or, amc, dimacs, dsharp, operators,
+                 tseitin, complete_models)
 
 settings.register_profile('patient', deadline=2000,
                           suppress_health_check=(HealthCheck.too_slow,))
@@ -121,8 +121,10 @@ def CNF(draw):
 
 @st.composite
 def models(draw):
-    return And(Var(name, draw(st.booleans()))
-               for name in range(1, 9))
+    return And(
+        Var(name, draw(st.booleans()))
+        for name in range(1, draw(st.integers(min_value=1, max_value=9)))
+    )
 
 
 @st.composite
@@ -766,9 +768,6 @@ def test_tseitin(sentence: nnf.NNF):
     T = tseitin.to_CNF(sentence)
     assert T.is_CNF()
 
-    # Only do the following checks when we haven't simplified away some vars
-    # assume(sentence.vars() <= T.vars())
-
     # TODO: Once forgetting/projection is implemented,
     #       do this more complete check
     # aux = filter(lambda x: 'aux' in str(x.name), T.vars())
@@ -776,15 +775,28 @@ def test_tseitin(sentence: nnf.NNF):
 
     models = list(complete_models(T.models(), sentence.vars() | T.vars()))
 
-    for mt in T.models():
+    for mt in models:
         assert sentence.satisfied_by(mt)
 
-    assert T.model_count() == sentence.model_count()
+    assert len(models) == sentence.model_count()
 
 @given(models())
 def test_complete_models(model: nnf.And[nnf.Var]):
-    t0, t1, t2 = [], ['test1'], ['test1', 'test2']
     m = {v.name: v.true for v in model}
-    assert 1 == len(list(complete_models([m], list(m.keys())+t0)))
-    assert 2 == len(list(complete_models([m], list(m.keys())+t1)))
-    assert 4 == len(list(complete_models([m], list(m.keys())+t2)))
+    neg = {v.name: not v.true for v in model}
+
+    zero = list(complete_models([m], model.vars()))
+    assert len(zero) == 1
+
+    one = list(complete_models([m], model.vars() | {"test1"}))
+    assert len(one) == 2
+
+    two = list(complete_models([m], model.vars() | {"test1", "test2"}))
+    assert len(two) == 4
+    assert all(x.keys() == m.keys() | {"test1", "test2"} for x in two)
+
+    if m:
+        multi = list(complete_models([m, neg], model.vars() | {"test1", "test2"}))
+        assert len(multi) == 8
+        assert len({frozenset(x.items()) for x in multi}) == 8  # all unique
+        assert all(x.keys() == m.keys() | {"test1", "test2"} for x in multi)

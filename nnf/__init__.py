@@ -31,8 +31,8 @@ Name = t.Hashable
 Model = t.Dict[Name, bool]
 
 __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Aux', 'Builder',
-           'all_models', 'decision', 'true', 'false', 'dsharp',
-           'dimacs', 'amc', 'tseitin', 'operators')
+           'all_models', 'complete_models', 'decision', 'true', 'false',
+           'dsharp', 'dimacs', 'amc', 'tseitin', 'operators')
 
 
 def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
@@ -1569,8 +1569,9 @@ class Or(Internal[T_NNF_co]):
 
 def complete_models(
         models: t.Iterable[Model],
-        names: t.FrozenSet[Name]
+        names: t.Iterable[Name]
 ) -> t.Iterator[Model]:
+    names = frozenset(names)
     diff = None
     for model in models:
         if diff is None:
