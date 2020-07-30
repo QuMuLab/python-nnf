@@ -30,7 +30,7 @@ if t.TYPE_CHECKING:
 Name = t.Hashable
 Model = t.Dict[Name, bool]
 
-__all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Builder',
+__all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Aux', 'Builder',
            'all_models', 'decision', 'true', 'false', 'dsharp',
            'dimacs', 'amc', 'tseitin', 'operators')
 
