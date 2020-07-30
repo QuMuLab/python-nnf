@@ -26,8 +26,9 @@ def solve(
     if not sentence.is_CNF():
         raise ValueError("Sentence must be in CNF")
 
-    SOLVER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        'bin', 'kissat')
+    SOLVER = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), 'bin', 'kissat'
+    )
     assert os.path.isfile(SOLVER), "Cannot seem to find kissat solver."
 
     args = [SOLVER] + extra_args
