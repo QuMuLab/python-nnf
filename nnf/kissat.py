@@ -15,7 +15,7 @@ __all__ = ('solve')
 
 def solve(
         sentence: And[Or[Var]],
-        extra_args: t.Sequence[str] = []
+        extra_args: t.Sequence[str] = ()
 ) -> t.Optional[Model]:
     """Run kissat to compute a satisfying assignment.
 
@@ -31,7 +31,8 @@ def solve(
     )
     assert os.path.isfile(SOLVER), "Cannot seem to find kissat solver."
 
-    args = [SOLVER] + extra_args
+    args = [SOLVER]
+    args.extend(extra_args)
 
     var_labels = dict(enumerate(sentence.vars(), start=1))
     var_labels_inverse = {v: k for k, v in var_labels.items()}
@@ -65,13 +66,14 @@ def solve(
     if 's SATISFIABLE' not in log:
         raise RuntimeError("Something went wrong. Log:\n\n{}".format(log))
 
-    log = [line.strip() for line in log.split('\n')]
+    log_lines = [line.strip() for line in log.split('\n')]
 
-    model = [line[2:] for line in log if line[:2] == 'v ']  # Variable lines
-    model = ' '.join(model).split(' ')  # Combine lines and split out literals
-    assert '0' == model[-1], "Error: Last entry should be a 0\n%s" % str(model)
-    model = model[:-1]
-    model = map(int, model)  # Individual numbered literals
-    model = {var_labels[abs(lit)]: lit > 0 for lit in model}
+    variable_lines = [line[2:] for line in log_lines if line[:2] == 'v ']
+    lit_strings = ' '.join(variable_lines).split(' ')
+    assert '0' == lit_strings[-1], \
+        "Error: Last entry should be a 0\n%s" % str(lit_strings)
+    lit_strings = lit_strings[:-1]
+    literals = map(int, lit_strings)  # Individual numbered literals
+    model = {var_labels[abs(lit)]: lit > 0 for lit in literals}
 
     return model
