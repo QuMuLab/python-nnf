@@ -60,6 +60,9 @@ U_NNF = t.TypeVar('U_NNF', bound='NNF')
 T_NNF_co = t.TypeVar('T_NNF_co', bound='NNF', covariant=True)
 _Tristate = t.Optional[bool]
 
+# Valid values: native, kissat, and pysat
+SAT_BACKEND = 'native'
+
 if t.TYPE_CHECKING:
     def memoize(func: T) -> T:
         ...
@@ -594,10 +597,17 @@ class NNF(metaclass=abc.ABCMeta):
         from nnf import tseitin
         return tseitin.to_CNF(self)
 
-    def _cnf_satisfiable(self) -> bool:
-        """Call a SAT solver (kissat) on the presumed CNF theory."""
-        from nnf import kissat
-        return kissat.solve(self) is not None
+    def _cnf_satisfiable(self: 'And[Or[Var]]') -> bool:
+        """Call a SAT solver on the presumed CNF theory."""
+        if 'native' == SAT_BACKEND:
+            return self._cnf_satisfiable_native()
+        elif 'kissat' == SAT_BACKEND:
+            from nnf import kissat
+            return kissat.solve(self) is not None
+        elif 'pysat' == SAT_BACKEND:
+            raise NotImplementedError('pysat backend not yet implemented')
+        else:
+            raise NotImplementedError('Unrecognized SAT backend: '+SAT_BACKEND)
 
     def _cnf_satisfiable_native(self) -> bool:
         """A naive DPLL SAT solver."""
