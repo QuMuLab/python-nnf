@@ -1,5 +1,5 @@
-"""Transformations using the well-known Tseitin encoding
-<https://en.wikipedia.org/wiki/Tseytin_transformation>
+"""Transformations using the well-known `Tseitin encoding
+<https://en.wikipedia.org/wiki/Tseytin_transformation>`_.
 
 The Tseitin transformation converts any arbitrary circuit to one in CNF in
 polynomial time/space. It does so at the cost of introducing new variables

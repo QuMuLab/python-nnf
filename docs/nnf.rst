@@ -43,3 +43,11 @@ nnf.amc module
    :members:
    :undoc-members:
    :show-inheritance:
+
+nnf.tseitin module
+------------------
+
+.. automodule:: nnf.tseitin
+   :members:
+   :undoc-members:
+   :show-inheritance:
