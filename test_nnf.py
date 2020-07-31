@@ -12,7 +12,8 @@ from hypothesis import (assume, event, given, strategies as st, settings,
 
 import nnf
 
-from nnf import Var, And, Or, amc, dimacs, dsharp, operators
+from nnf import (Var, And, Or, amc, dimacs, dsharp, operators,
+                 tseitin, complete_models)
 
 settings.register_profile('patient', deadline=2000,
                           suppress_health_check=(HealthCheck.too_slow,))
@@ -120,13 +121,19 @@ def CNF(draw):
 
 @st.composite
 def models(draw):
-    return And(Var(name, draw(st.booleans()))
-               for name in range(1, 9))
+    return And(
+        Var(name, draw(st.booleans()))
+        for name in range(1, draw(st.integers(min_value=1, max_value=9)))
+    )
 
 
 @st.composite
 def MODS(draw):
-    return Or(draw(st.frozensets(models())))
+    num = draw(st.integers(min_value=1, max_value=9))
+    amount = draw(st.integers(min_value=0, max_value=10))
+    return Or(And(Var(name, draw(st.booleans()))
+                  for name in range(1, num))
+              for _ in range(amount))
 
 
 @st.composite
@@ -702,7 +709,7 @@ def test_nor(a: nnf.NNF, b: nnf.NNF):
 
 
 @given(NNF(), NNF())
-def test_implies(a: nnf.NNF, b: nnf.NNF):
+def test_implies2(a: nnf.NNF, b: nnf.NNF):
     c = operators.implies(a, b)
     for model in nnf.all_models(c.vars()):
         assert ((a.satisfied_by(model) and not b.satisfied_by(model)) !=
@@ -771,3 +778,46 @@ if shutil.which('dsharp') is not None:
         assert all(isinstance(name, str) for name in compiled.vars())
         if sentence.satisfiable():
             assert sentence.equivalent(compiled)
+
+
+@given(NNF())
+def test_tseitin(sentence: nnf.NNF):
+
+    # Assumption to reduce the time in testing
+    assume(sentence.size() <= 10)
+
+    T = tseitin.to_CNF(sentence)
+    assert T.is_CNF()
+
+    # TODO: Once forgetting/projection is implemented,
+    #       do this more complete check
+    # aux = filter(lambda x: 'aux' in str(x.name), T.vars())
+    # assert T.forget(aux).equivalent(sentence)
+
+    models = list(complete_models(T.models(), sentence.vars() | T.vars()))
+
+    for mt in models:
+        assert sentence.satisfied_by(mt)
+
+    assert len(models) == sentence.model_count()
+
+@given(models())
+def test_complete_models(model: nnf.And[nnf.Var]):
+    m = {v.name: v.true for v in model}
+    neg = {v.name: not v.true for v in model}
+
+    zero = list(complete_models([m], model.vars()))
+    assert len(zero) == 1
+
+    one = list(complete_models([m], model.vars() | {"test1"}))
+    assert len(one) == 2
+
+    two = list(complete_models([m], model.vars() | {"test1", "test2"}))
+    assert len(two) == 4
+    assert all(x.keys() == m.keys() | {"test1", "test2"} for x in two)
+
+    if m:
+        multi = list(complete_models([m, neg], model.vars() | {"test1", "test2"}))
+        assert len(multi) == 8
+        assert len({frozenset(x.items()) for x in multi}) == 8  # all unique
+        assert all(x.keys() == m.keys() | {"test1", "test2"} for x in multi)
