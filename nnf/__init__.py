@@ -597,13 +597,13 @@ class NNF(metaclass=abc.ABCMeta):
         from nnf import tseitin
         return tseitin.to_CNF(self)
 
-    def _cnf_satisfiable(self: 'And[Or[Var]]') -> bool:
+    def _cnf_satisfiable(self) -> bool:
         """Call a SAT solver on the presumed CNF theory."""
         if 'native' == SAT_BACKEND:
             return self._cnf_satisfiable_native()
         elif 'kissat' == SAT_BACKEND:
             from nnf import kissat
-            return kissat.solve(self) is not None
+            return kissat.solve(t.cast(And[Or[Var]], self)) is not None
         elif 'pysat' == SAT_BACKEND:
             raise NotImplementedError('pysat backend not yet implemented')
         else:
