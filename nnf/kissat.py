@@ -69,11 +69,9 @@ def solve(
     log_lines = [line.strip() for line in log.split('\n')]
 
     variable_lines = [line[2:] for line in log_lines if line[:2] == 'v ']
-    lit_strings = ' '.join(variable_lines).split(' ')
-    assert '0' == lit_strings[-1], \
-        "Error: Last entry should be a 0\n%s" % str(lit_strings)
-    lit_strings = lit_strings[:-1]
-    literals = map(int, lit_strings)  # Individual numbered literals
+    literals = [int(num) for line in variable_lines for num in line.split()]
+    assert literals[-1] == 0, "Last entry should be 0. Log:\n\n{}".format(log)
+    literals.pop()
     model = {var_labels[abs(lit)]: lit > 0 for lit in literals}
 
     return model
