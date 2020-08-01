@@ -6,7 +6,8 @@ import io
 import typing as t
 import warnings
 
-from nnf import NNF, Var, And, Or, Name, true, false
+from nnf import NNF, Var, And, Or, true, false
+from nnf.util import Name
 
 __all__ = ('dump', 'load', 'dumps', 'loads')
 

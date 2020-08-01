@@ -6,7 +6,8 @@ import operator
 
 import typing as t
 
-from nnf import NNF, And, Var, Or, Internal, Name, true, false, memoize
+from nnf import NNF, And, Var, Or, Internal, true, false
+from nnf.util import Name, memoize
 
 neg_inf = float('-inf')
 

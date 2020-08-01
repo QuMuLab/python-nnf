@@ -8,7 +8,8 @@ import shutil
 import subprocess
 import typing as t
 
-from nnf import And, Or, Var, dimacs, Model
+from nnf import And, Or, Var, dimacs
+from nnf.util import Model
 
 __all__ = ('solve',)
 

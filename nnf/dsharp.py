@@ -25,7 +25,8 @@ import subprocess
 import tempfile
 import typing as t
 
-from nnf import NNF, And, Or, Var, false, dimacs, Name
+from nnf import NNF, And, Or, Var, false, dimacs
+from nnf.util import Name
 
 __all__ = ('load', 'loads', 'compile')
 

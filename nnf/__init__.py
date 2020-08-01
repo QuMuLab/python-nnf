@@ -24,11 +24,20 @@ import uuid
 
 from collections import Counter
 
+from nnf.util import (
+    memoize,
+    T_NNF,
+    U_NNF,
+    T_NNF_co,
+    _Tristate,
+    Bottom,
+    Name,
+    Model,
+)
+
 if t.TYPE_CHECKING:
     import nnf
 
-Name = t.Hashable
-Model = t.Dict[Name, bool]
 
 __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Aux', 'Builder',
            'all_models', 'complete_models', 'decision', 'true', 'false',
@@ -55,12 +64,6 @@ def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
             yield new
 
 
-T = t.TypeVar('T')
-T_NNF = t.TypeVar('T_NNF', bound='NNF')
-U_NNF = t.TypeVar('U_NNF', bound='NNF')
-T_NNF_co = t.TypeVar('T_NNF_co', bound='NNF', covariant=True)
-_Tristate = t.Optional[bool]
-
 # Valid values: native and kissat
 SAT_BACKEND = 'native'
 
@@ -79,13 +82,6 @@ class using_kissat():
     def __exit__(self, *_: t.Any) -> None:
         global SAT_BACKEND
         SAT_BACKEND = self.setting
-
-
-if t.TYPE_CHECKING:
-    def memoize(func: T) -> T:
-        ...
-else:
-    memoize = functools.lru_cache(maxsize=None)
 
 
 class NNF(metaclass=abc.ABCMeta):
@@ -1677,9 +1673,9 @@ def decision(
 
 
 #: A node that's always true. Technically an And node without children.
-true = And()  # type: And[NNF]
+true = And()  # type: And[Bottom]
 #: A node that's always false. Technically an Or node without children.
-false = Or()  # type: Or[NNF]
+false = Or()  # type: Or[Bottom]
 
 
 class Builder:
