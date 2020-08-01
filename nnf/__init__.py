@@ -472,7 +472,7 @@ class NNF(metaclass=abc.ABCMeta):
 
             return count(sentence)
 
-        return len(list(sentence.models()))
+        return sum(1 for _ in sentence.models())
 
     def contradicts(
             self,
