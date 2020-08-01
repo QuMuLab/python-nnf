@@ -20,6 +20,8 @@ from nnf import NNF, dimacs
 #       model enumeration
 #       ...
 
+DOT_FORMATS = {'ps', 'pdf', 'svg', 'fig', 'png', 'gif', 'jpg', 'jpeg'}
+
 
 @contextlib.contextmanager
 def timer(args: argparse.Namespace) -> t.Iterator[SimpleNamespace]:
@@ -190,9 +192,6 @@ def info(args: argparse.Namespace) -> int:
     return 0
 
 
-dot_formats = {'ps', 'pdf', 'svg', 'fig', 'png', 'gif', 'jpg', 'jpeg'}
-
-
 def extension(fname: str) -> t.Optional[str]:
     if '.' not in fname:
         return None
@@ -206,7 +205,7 @@ def draw(args: argparse.Namespace) -> int:
     dot = sentence.to_DOT(color=args.color, label=label)
 
     ext = extension(args.out)
-    if ext in dot_formats or args.format is not None:
+    if ext in DOT_FORMATS or args.format is not None:
         argv = ['dot', '-T' + (ext if args.format is None  # type: ignore
                                else args.format)]
         if args.out != '-':
