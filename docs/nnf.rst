@@ -51,3 +51,11 @@ nnf.tseitin module
    :members:
    :undoc-members:
    :show-inheritance:
+
+nnf.kissat module
+-----------------
+
+.. automodule:: nnf.kissat
+   :members:
+   :undoc-members:
+   :show-inheritance:
