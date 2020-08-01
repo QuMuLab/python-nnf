@@ -4,8 +4,8 @@
 """
 
 import os
+import shutil
 import subprocess
-import tempfile
 import typing as t
 
 from nnf import And, Or, Var, dimacs, Model
@@ -26,9 +26,12 @@ def solve(
     if not sentence.is_CNF():
         raise ValueError("Sentence must be in CNF")
 
-    SOLVER = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), 'bin', 'kissat'
-    )
+    if shutil.which('kissat') is not None:
+        SOLVER = 'kissat'
+    else:
+        SOLVER = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'bin', 'kissat'
+        )
     assert os.path.isfile(SOLVER), "Cannot seem to find kissat solver."
 
     args = [SOLVER]
@@ -37,20 +40,24 @@ def solve(
     var_labels = dict(enumerate(sentence.vars(), start=1))
     var_labels_inverse = {v: k for k, v in var_labels.items()}
 
-    infd, infname = tempfile.mkstemp(text=True)
-    try:
-        with open(infd, 'w') as f:
-            dimacs.dump(sentence, f, mode='cnf', var_labels=var_labels_inverse)
+    cnf = dimacs.dumps(sentence, mode='cnf', var_labels=var_labels_inverse)
 
+    try:
         proc = subprocess.Popen(
-            args + [infname],
+            args,
             stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE,
             universal_newlines=True
         )
-        log, _ = proc.communicate()
-
-    finally:
-        os.remove(infname)
+        log, _ = proc.communicate(cnf)
+    except OSError as err:
+        if err.errno == 8:
+            print("Error: Attempting to run the kissat binary on an")
+            print("       incompatible system. Consider compiling kissat")
+            print("       natively so it is accessible via the command line.")
+            raise RuntimeError("Unable to run kissat.")
+        else:
+            raise RuntimeError("Unrecognized OSError: %d" % err.errno)
 
     # Two known exit codes for the solver
     if proc.returncode not in [10, 20]:
@@ -60,11 +67,11 @@ def solve(
             )
         )
 
-    if 's UNSATISFIABLE' in log:
+    # Unsatisfiable
+    if proc.returncode == 20:
         return None
 
-    if 's SATISFIABLE' not in log:
-        raise RuntimeError("Something went wrong. Log:\n\n{}".format(log))
+    assert proc.returncode == 10, "Bad error code. Log:\n\n{}".format(log)
 
     variable_lines = [
         line[2:] for line in log.split("\n") if line.startswith("v ")

@@ -60,7 +60,7 @@ U_NNF = t.TypeVar('U_NNF', bound='NNF')
 T_NNF_co = t.TypeVar('T_NNF_co', bound='NNF', covariant=True)
 _Tristate = t.Optional[bool]
 
-# Valid values: native, kissat, and pysat
+# Valid values: native and kissat
 SAT_BACKEND = 'native'
 
 if t.TYPE_CHECKING:
@@ -599,13 +599,11 @@ class NNF(metaclass=abc.ABCMeta):
 
     def _cnf_satisfiable(self) -> bool:
         """Call a SAT solver on the presumed CNF theory."""
-        if 'native' == SAT_BACKEND:
+        if SAT_BACKEND == 'native':
             return self._cnf_satisfiable_native()
-        elif 'kissat' == SAT_BACKEND:
+        elif SAT_BACKEND == 'kissat':
             from nnf import kissat
             return kissat.solve(t.cast(And[Or[Var]], self)) is not None
-        elif 'pysat' == SAT_BACKEND:
-            raise NotImplementedError('pysat backend not yet implemented')
         else:
             raise NotImplementedError('Unrecognized SAT backend: '+SAT_BACKEND)
 
