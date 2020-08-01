@@ -10,7 +10,7 @@ import typing as t
 
 from nnf import And, Or, Var, dimacs, Model
 
-__all__ = ('solve')
+__all__ = ('solve',)
 
 
 def solve(
