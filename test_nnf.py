@@ -828,6 +828,7 @@ def test_tseitin(sentence: nnf.NNF):
 
     assert len(models) == sentence.model_count()
 
+
 @given(models())
 def test_complete_models(model: nnf.And[nnf.Var]):
     m = {v.name: v.true for v in model}
@@ -844,10 +845,13 @@ def test_complete_models(model: nnf.And[nnf.Var]):
     assert all(x.keys() == m.keys() | {"test1", "test2"} for x in two)
 
     if m:
-        multi = list(complete_models([m, neg], model.vars() | {"test1", "test2"}))
+        multi = list(
+            complete_models([m, neg], model.vars() | {"test1", "test2"})
+        )
         assert len(multi) == 8
         assert len({frozenset(x.items()) for x in multi}) == 8  # all unique
         assert all(x.keys() == m.keys() | {"test1", "test2"} for x in multi)
+
 
 if (platform.uname().system, platform.uname().machine) == ('Linux', 'x86_64'):
 
@@ -865,4 +869,7 @@ if (platform.uname().system, platform.uname().machine) == ('Linux', 'x86_64'):
     @given(NNF())
     def test_kissat_nnf(sentence: And[Or[Var]]):
         with using_kissat():
-            assert sentence.satisfiable() == tseitin.to_CNF(sentence)._cnf_satisfiable_native()
+            assert (
+                sentence.satisfiable()
+                == tseitin.to_CNF(sentence)._cnf_satisfiable_native()
+            )
