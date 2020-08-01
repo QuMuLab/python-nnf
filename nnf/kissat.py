@@ -66,9 +66,9 @@ def solve(
     if 's SATISFIABLE' not in log:
         raise RuntimeError("Something went wrong. Log:\n\n{}".format(log))
 
-    log_lines = [line.strip() for line in log.split('\n')]
-
-    variable_lines = [line[2:] for line in log_lines if line[:2] == 'v ']
+    variable_lines = [
+        line[2:] for line in log.split("\n") if line.startswith("v ")
+    ]
     literals = [int(num) for line in variable_lines for num in line.split()]
     assert literals[-1] == 0, "Last entry should be 0. Log:\n\n{}".format(log)
     literals.pop()
