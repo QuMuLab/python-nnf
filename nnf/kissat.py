@@ -55,9 +55,7 @@ def solve(
             print("Error: Attempting to run the kissat binary on an")
             print("       incompatible system. Consider compiling kissat")
             print("       natively so it is accessible via the command line.")
-            raise RuntimeError("Unable to run kissat.")
-        else:
-            raise RuntimeError("Unrecognized OSError: %d" % err.errno)
+        raise
 
     # Two known exit codes for the solver
     if proc.returncode not in [10, 20]:
