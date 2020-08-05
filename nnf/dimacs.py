@@ -312,4 +312,6 @@ def _parse_cnf(tokens: t.Iterable[str]) -> And[Or[Var]]:
         # A file may or may not end with a 0
         # Adding an empty clause is not desirable
         clauses.add(Or(clause))
-    return And(clauses)
+    sentence = And(clauses)
+    NNF._is_CNF_loose.memo[sentence] = True
+    return sentence

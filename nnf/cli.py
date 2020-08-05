@@ -154,10 +154,9 @@ def sentence_stats(verbose: bool, sentence: NNF) -> SimpleNamespace:
 def sat(args: argparse.Namespace) -> int:
     with open_read(args.file) as f:
         sentence = dimacs.load(f)
-    stats = sentence_stats(args.verbose, sentence)
+    sentence_stats(args.verbose, sentence)
     with timer(args):
-        sat = sentence.satisfiable(decomposable=stats.decomposable,
-                                   cnf=stats.cnf)
+        sat = sentence.satisfiable()
     if sat:
         if not args.quiet:
             print("SATISFIABLE")
@@ -171,11 +170,11 @@ def sat(args: argparse.Namespace) -> int:
 def sharpsat(args: argparse.Namespace) -> int:
     with open_read(args.file) as f:
         sentence = dimacs.load(f)
-    stats = sentence_stats(args.verbose, sentence)
+    if args.deterministic:
+        sentence.mark_deterministic()
+    sentence_stats(args.verbose, sentence)
     with timer(args):
-        num = sentence.model_count(decomposable=stats.decomposable,
-                                   deterministic=args.deterministic,
-                                   smooth=stats.smooth)
+        num = sentence.model_count()
     if args.quiet:
         print(num)
     else:

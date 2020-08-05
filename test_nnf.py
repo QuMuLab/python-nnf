@@ -357,6 +357,7 @@ def test_dsharp_output(fname: str):
         sentence = dsharp.load(f)
     with open(basepath + '.cnf') as f:
         clauses = dimacs.load(f)
+    nnf.NNF.decomposable.memo.clear()
     assert sentence.decomposable()
     # this is not a complete check, but clauses.models() is very expensive
     assert all(clauses.satisfied_by(model) for model in sentence.models())
@@ -463,6 +464,7 @@ def test_smoothing(sentence: nnf.NNF):
         event("Sentence not smooth yet")
         smoothed = sentence.make_smooth()
         assert type(sentence) is type(smoothed)
+        nnf.NNF.smooth.memo.clear()
         assert smoothed.smooth()
         assert sentence.equivalent(smoothed)
         assert smoothed.make_smooth() == smoothed
@@ -483,14 +485,10 @@ def test_uf20_models():
 
     for sentence in uf20:
         assert sentence.decomposable()
-        m = list(sentence.models(deterministic=False,
-                                 decomposable=True))
+        m = list(sentence.models(deterministic=False))
         models = model_set(m)
         assert len(m) == len(models)
-        assert models == model_set(sentence.models(deterministic=True,
-                                                   decomposable=False))
-        assert models == model_set(sentence.models(deterministic=True,
-                                                   decomposable=True))
+        assert models == model_set(sentence.models(deterministic=True))
 
 
 @given(NNF())
@@ -530,8 +528,8 @@ def test_model_counting(sentence: nnf.NNF):
 
 def test_uf20_model_counting():
     for sentence in uf20:
-        assert (sentence.model_count(deterministic=True)
-                == len(list(sentence.models())))
+        sentence.mark_deterministic()
+        assert sentence.model_count() == len(list(sentence.models()))
 
 
 @given(NNF())
@@ -548,25 +546,52 @@ def test_validity(sentence: nnf.NNF):
 
 def test_uf20_validity():
     for sentence in uf20:
-        assert not sentence.valid(deterministic=True)
+        sentence.mark_deterministic()
+        assert not sentence.valid()
 
 
 @given(CNF())
 def test_is_CNF(sentence: nnf.NNF):
     assert sentence.is_CNF()
+    assert sentence.is_CNF(strict=True)
     assert not sentence.is_DNF()
+
+
+def test_is_CNF_examples():
+    assert And().is_CNF()
+    assert And().is_CNF(strict=True)
+    assert And({Or()}).is_CNF()
+    assert And({Or()}).is_CNF(strict=True)
+    assert And({Or({a, ~b})}).is_CNF()
+    assert And({Or({a, ~b})}).is_CNF(strict=True)
+    assert And({Or({a, ~b}), Or({c, ~c})}).is_CNF()
+    assert not And({Or({a, ~b}), Or({c, ~c})}).is_CNF(strict=True)
 
 
 @given(DNF())
 def test_is_DNF(sentence: nnf.NNF):
     assert sentence.is_DNF()
+    assert sentence.is_DNF(strict=True)
     assert not sentence.is_CNF()
+
+
+def test_is_DNF_examples():
+    assert Or().is_DNF()
+    assert Or().is_DNF(strict=True)
+    assert Or({And()}).is_DNF()
+    assert Or({And()}).is_DNF(strict=True)
+    assert Or({And({a, ~b})}).is_DNF()
+    assert Or({And({a, ~b})}).is_DNF(strict=True)
+    assert Or({And({a, ~b}), And({c, ~c})}).is_DNF()
+    assert not Or({And({a, ~b}), And({c, ~c})}).is_DNF(strict=True)
 
 
 @given(NNF())
 def test_to_MODS(sentence: nnf.NNF):
     assume(len(sentence.vars()) <= 5)
     mods = sentence.to_MODS()
+    nnf.NNF.is_MODS.memo.clear()
+    nnf.NNF._is_DNF_strict.memo.clear()
     assert mods.is_MODS()
     assert isinstance(mods, Or)
     assert mods.model_count() == len(mods.children)
@@ -591,7 +616,7 @@ def test_pairwise(sentence: nnf.NNF):
 def test_implicates(sentence: nnf.NNF):
     implicates = sentence.implicates()
     assert implicates.equivalent(sentence)
-    assert implicates.is_CNF()
+    assert implicates.is_CNF(strict=True)
     assert not any(a.children < b.children
                    for a in implicates.children
                    for b in implicates.children)
@@ -666,9 +691,9 @@ def test_implies(a: nnf.NNF, b: nnf.NNF):
 @given(CNF())
 def test_cnf_sat(sentence: nnf.NNF):
     assert sentence.is_CNF()
-    assert sentence.satisfiable(cnf=True) == sentence.satisfiable(cnf=False)
-    assert (model_set(sentence.models(cnf=True)) ==
-            model_set(sentence.models(cnf=False, deterministic=True)))
+    models_ = list(sentence.models())
+    assert model_set(models_) == model_set(sentence._models_deterministic())
+    assert sentence.satisfiable() == bool(models_)
 
 
 def test_uf20_cnf_sat():
@@ -679,7 +704,7 @@ def test_uf20_cnf_sat():
         # But even 20 variables is too much
         # So let's just hope that test_cnf_sat does enough
         at_least_one = False
-        for model in sentence.models(cnf=True):
+        for model in sentence.models():
             assert sentence.satisfied_by(model)
             at_least_one = True
         assert at_least_one
@@ -782,6 +807,8 @@ if shutil.which('dsharp') is not None:
         for sentence in uf20_cnf:
             compiled = dsharp.compile(sentence)
             compiled_smooth = dsharp.compile(sentence, smooth=True)
+            nnf.NNF.decomposable.memo.clear()
+            nnf.NNF.smooth.memo.clear()
             assert sentence.equivalent(compiled)
             assert sentence.equivalent(compiled_smooth)
             assert compiled.decomposable()
@@ -793,6 +820,8 @@ if shutil.which('dsharp') is not None:
         assume(all(len(clause) > 0 for clause in sentence))
         compiled = dsharp.compile(sentence)
         compiled_smooth = dsharp.compile(sentence, smooth=True)
+        nnf.NNF.decomposable.memo.clear()
+        nnf.NNF.smooth.memo.clear()
         assert compiled.decomposable()
         assert compiled_smooth.decomposable()
         assert compiled_smooth.smooth()
@@ -811,6 +840,28 @@ if shutil.which('dsharp') is not None:
             assert sentence.equivalent(compiled)
 
 
+def test_mark_deterministic():
+    s = And()
+    t = And()
+
+    assert not s.marked_deterministic()
+    assert not t.marked_deterministic()
+
+    s.mark_deterministic()
+
+    assert s.marked_deterministic()
+    assert not t.marked_deterministic()
+
+    t.mark_deterministic()
+
+    assert s.marked_deterministic()
+    assert t.marked_deterministic()
+
+    del s
+
+    assert t.marked_deterministic()
+
+
 @given(NNF())
 def test_tseitin(sentence: nnf.NNF):
 
@@ -818,6 +869,7 @@ def test_tseitin(sentence: nnf.NNF):
     assume(sentence.size() <= 10)
 
     T = tseitin.to_CNF(sentence)
+    nnf.NNF.is_CNF.memo.clear()
     assert T.is_CNF()
     assert T.forget_aux().equivalent(sentence)
 

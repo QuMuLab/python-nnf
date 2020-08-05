@@ -21,11 +21,13 @@ import operator
 import os
 import typing as t
 import uuid
+import weakref
 
 from collections import Counter
 
 from nnf.util import (
     memoize,
+    weakref_memoize,
     T_NNF,
     U_NNF,
     T_NNF_co,
@@ -86,7 +88,7 @@ class using_kissat():
 
 class NNF(metaclass=abc.ABCMeta):
     """Base class for all NNF sentences."""
-    __slots__ = ()
+    __slots__ = ("__weakref__",)
 
     def __and__(self: T_NNF, other: U_NNF) -> 'And[t.Union[T_NNF, U_NNF]]':
         """And({self, other})"""
@@ -113,6 +115,7 @@ class NNF(metaclass=abc.ABCMeta):
                         seen.add(child)
                         nodes.append(child)
 
+    @weakref_memoize
     def size(self) -> int:
         """The number of edges in the sentence.
 
@@ -161,27 +164,74 @@ class NNF(metaclass=abc.ABCMeta):
                    for node in self.walk()
                    if isinstance(node, And))
 
+    @weakref_memoize
     def vars(self) -> t.FrozenSet[Name]:
         """The names of all variables that appear in the sentence."""
         return frozenset(node.name
                          for node in self.walk()
                          if isinstance(node, Var))
 
+    def _memoized_vars(self) -> t.Callable[["NNF"], t.FrozenSet[Name]]:
+        """Return a memoized alternative to the .vars() method.
+
+        You should use this if you're going to query the variables of many
+        nodes within a sentence.
+
+        This returns a function so the cache is cleared when it's garbage
+        collected.
+        """
+
+        @memoize
+        def vars_(node: NNF) -> t.FrozenSet[Name]:
+            if isinstance(node, Var):
+                return frozenset({node.name})
+            assert isinstance(node, Internal)
+            return frozenset(
+                v for child in node.children for v in vars_(child)
+            )
+
+        return vars_
+
+    @weakref_memoize
     def decomposable(self) -> bool:
         """The children of each And node don't share variables, recursively."""
-        @memoize
-        def var(node: NNF) -> t.FrozenSet[Name]:
-            return node.vars()
+        vars_ = self._memoized_vars()
 
         for node in self.walk():
             if isinstance(node, And):
                 seen = set()  # type: t.Set[Name]
                 for child in node.children:
-                    for name in var(child):
+                    for name in vars_(child):
                         if name in seen:
                             return False
                         seen.add(name)
         return True
+
+    # We want something set-like, but WeakSets are unreliable for reasons
+    # explained in nnf.util.weakref_memoize.
+    # We use a WeakValueDictionary that maps object IDs to the objects
+    # themselves. This has the properties we want:
+    # - Objects disappear from the dictionary when collected.
+    # - We never forget that an object was marked.
+    # Unlike @weakref_memoize, a result for one object never transfers to
+    # an equal object. But since .mark_deterministic() is a manual optimization
+    # it's probably better that way.
+    _deterministic_sentences = (
+        weakref.WeakValueDictionary()
+    )  # type: weakref.WeakValueDictionary[int, NNF]
+
+    def mark_deterministic(self) -> None:
+        """Declare for optimization that this sentence is deterministic.
+
+        Note that this goes by object identity, not equality. This may matter
+        in obscure cases where you instantiate the same sentence multiple
+        times.
+        """
+        NNF._deterministic_sentences[id(self)] = self
+
+    def marked_deterministic(self) -> bool:
+        """Whether this sentence has been marked as deterministic."""
+        return id(self) in NNF._deterministic_sentences
 
     def deterministic(self) -> bool:
         """The children of each Or node contradict each other.
@@ -195,16 +245,19 @@ class NNF(metaclass=abc.ABCMeta):
                         return False
         return True
 
+    @weakref_memoize
     def smooth(self) -> bool:
         """The children of each Or node all use the same variables."""
+        vars_ = self._memoized_vars()
+
         for node in self.walk():
             if isinstance(node, Or) and len(node.children) > 1:
                 expected = None
                 for child in node.children:
                     if expected is None:
-                        expected = child.vars()
+                        expected = vars_(child)
                     else:
-                        if child.vars() != expected:
+                        if vars_(child) != expected:
                             return False
         return True
 
@@ -249,37 +302,21 @@ class NNF(metaclass=abc.ABCMeta):
 
         return sat(self)
 
-    def satisfiable(
-            self,
-            *,
-            decomposable: _Tristate = None,
-            cnf: _Tristate = None
-    ) -> bool:
+    def satisfiable(self) -> bool:
         """Some set of values exists that makes the sentence correct.
 
         This method doesn't necessarily try to find an example, which can
         make it faster. It's decent at decomposable sentences and sentences in
         CNF, and bad at other sentences.
-
-        :param decomposable: Indicate whether the sentence is decomposable. By
-                             default, this will be checked.
-        :param cnf: Indicate whether the sentence is in CNF. By default,
-                    this will be checked.
         """
         if not self._satisfiable_decomposable():
             return False
 
-        if decomposable is None:
-            decomposable = self.decomposable()
-
-        if decomposable:
+        if self.decomposable():
             # Would've been picked up already if not satisfiable
             return True
 
-        if cnf is None:
-            cnf = self.is_CNF()
-
-        if cnf:
+        if self.is_CNF():
             return self._cnf_satisfiable()
         else:
             from nnf import tseitin
@@ -329,38 +366,17 @@ class NNF(metaclass=abc.ABCMeta):
 
     consistent = satisfiable  # synonym
 
-    def valid(
-            self,
-            *,
-            decomposable: _Tristate = None,
-            deterministic: bool = False,
-            smooth: _Tristate = None
-    ) -> bool:
+    def valid(self) -> bool:
         """Check whether the sentence is valid (i.e. always true).
 
         This can be done efficiently for sentences that are decomposable and
         deterministic.
-
-        :param decomposable: Whether to assume the sentence is decomposable.
-                             If ``None`` (the default), the sentence is
-                             automatically checked.
-        :param deterministic: Whether the sentence is deterministic. This
-                              should be set to ``True`` for sentences that
-                              are known to be deterministic. It's assumed to
-                              be ``False`` otherwise.
-        :param smooth: Whether to assume the sentence is smooth. If ``None``
-                       (the default), the sentence is automatically checked.
         """
-        if decomposable is None:
-            decomposable = self.decomposable()
-
-        if decomposable and deterministic:
+        if self.marked_deterministic() and self.decomposable():
             # mypy is unsure that 2**<int> is actually an int
             # but len(self.vars()) >= 0, so it definitely is
             max_num_models = 2**len(self.vars())  # type: int
-            return max_num_models == self.model_count(decomposable=True,
-                                                      deterministic=True,
-                                                      smooth=smooth)
+            return max_num_models == self.model_count()
 
         return not self.negate().satisfiable()
 
@@ -377,85 +393,54 @@ class NNF(metaclass=abc.ABCMeta):
 
     entails = implies
 
-    def models(
-            self,
-            *,
-            decomposable: _Tristate = None,
-            deterministic: bool = False,
-            cnf: _Tristate = None
-    ) -> t.Iterator[Model]:
+    def models(self, *, deterministic: _Tristate = None) -> t.Iterator[Model]:
         """Yield all dictionaries of values that make the sentence correct.
 
         Much faster on sentences that are deterministic or decomposable or
         both.
 
         The algorithm for deterministic sentences works on non-deterministic
-        sentences, but may be much slower for such sentences. Using
-        ``deterministic=True`` for sentences that aren't deterministic can
-        be a reasonable decision.
+        sentences, but may be much slower for such sentences. Pass
+        ``deterministic=True`` to use it anyway. This can give a speedup in
+        some cases.
 
-        :param decomposable: Whether to assume the sentence is
-                             decomposable. If ``None`` (the default),
-                             the sentence is automatically checked.
-        :param deterministic: Indicate whether the sentence is
-                              deterministic. Set this to ``True`` if you
-                              know it to be deterministic, or want it to be
-                              treated as deterministic.
-        :param cnf: Indicate whether the sentence is in CNF, in which case a
-                    SAT solver will be used. Set to ``True`` to skip the
-                    automatic check and immediately use that method, set to
-                    ``False`` to force the use of another algorithm.
+        :param deterministic: If ``True``, treat the sentence as if it's
+                              deterministic. If ``False``, treat it as if it
+                              isn't, even if it's marked otherwise.
         """
-        if decomposable is None:
-            decomposable = self.decomposable()
-        if cnf is None:
-            cnf = self.is_CNF()
-        if cnf:
+        if deterministic is None:
+            deterministic = self.marked_deterministic()
+        if self.is_CNF():
             yield from self._cnf_models()
         elif deterministic:
-            yield from self._models_deterministic(decomposable=decomposable)
-        elif decomposable:
+            yield from self._models_deterministic()
+        elif self.decomposable():
             yield from self._models_decomposable()
         else:
             for model in all_models(self.vars()):
                 if self.satisfied_by(model):
                     yield model
 
-    def model_count(
-            self,
-            *,
-            decomposable: _Tristate = None,
-            deterministic: bool = False,
-            smooth: _Tristate = None
-    ) -> int:
+    def model_count(self) -> int:
         """Return the number of models the sentence has.
 
         This can be done efficiently for sentences that are decomposable and
         deterministic.
-
-        :param decomposable: Whether to assume the sentence is decomposable.
-                             If ``None`` (the default), the sentence is
-                             automatically checked.
-        :param deterministic: Whether the sentence is deterministic. This
-                              should be set to ``True`` for sentences that
-                              are known to be deterministic. It's assumed to
-                              be ``False`` otherwise.
-        :param smooth: Whether to assume the sentence is smooth. If the
-                       sentence isn't smooth, an extra step is needed. If
-                       ``None`` (the default), the sentence is automatically
-                       checked.
         """
-        if decomposable is None:
-            decomposable = self.decomposable()
-        if smooth is None:
-            smooth = self.smooth()
+        decomposable = self.decomposable()
+        deterministic = self.marked_deterministic()
+        made_smooth = False
 
         sentence = self
-        if decomposable and deterministic and not smooth:
+        if decomposable and deterministic and not sentence.smooth():
             sentence = sentence.make_smooth()
-            smooth = True
+            made_smooth = True
 
-        if decomposable and deterministic and smooth:
+        if (
+            decomposable
+            and deterministic
+            and (made_smooth or sentence.smooth())
+        ):
             @memoize
             def count(node: NNF) -> int:
                 if isinstance(node, Var):
@@ -830,9 +815,14 @@ class NNF(metaclass=abc.ABCMeta):
 
     def to_MODS(self) -> 'Or[And[Var]]':
         """Convert the sentence to a MODS sentence."""
-        return Or(And(Var(name, val)
-                      for name, val in model.items())
-                  for model in self.models())
+        new = Or(
+            And(Var(name, val) for name, val in model.items())
+            for model in self.models()
+        )
+        NNF.is_MODS.memo[new] = True
+        NNF._is_DNF_loose.memo[new] = True
+        NNF._is_DNF_strict.memo[new] = True
+        return new
 
     def to_model(self) -> Model:
         """If the sentence directly represents a model, convert it to that.
@@ -879,6 +869,8 @@ class NNF(metaclass=abc.ABCMeta):
 
     def make_smooth(self) -> 'NNF':
         """Transform the sentence into an equivalent smooth sentence."""
+        vars_ = self._memoized_vars()
+
         @memoize
         def filler(name: Name) -> 'Or[Var]':
             return Or({Var(name), Var(name, False)})
@@ -891,11 +883,11 @@ class NNF(metaclass=abc.ABCMeta):
             elif isinstance(node, Var):
                 return node
             elif isinstance(node, Or):
-                names = node.vars()
+                names = vars_(node)
                 children = {smooth(child) for child in node.children}
                 smoothed = set()  # type: t.Set[NNF]
                 for child in children:
-                    child_names = child.vars()
+                    child_names = vars_(child)
                     if len(child_names) < len(names):
                         child_children = {child}
                         child_children.update(filler(name)
@@ -910,7 +902,9 @@ class NNF(metaclass=abc.ABCMeta):
                 return node
             return new
 
-        return smooth(self)
+        ret = smooth(self)
+        NNF.smooth.memo[ret] = True
+        return ret
 
     def simplify(self, merge_nodes: bool = True) -> 'NNF':
         """Apply the following transformations to make the sentence simpler:
@@ -1048,8 +1042,8 @@ class NNF(metaclass=abc.ABCMeta):
         represented by two separate objects. This method gets rid of that
         duplication.
 
-        In a lot of cases it's better to avoid the duplication in the first
-        place, for example with a Builder object.
+        It's better to avoid the duplication in the first place. This method is
+        for diagnostic purposes, in combination with :meth:`NNF.object_count`.
         """
         new_nodes = {}  # type: t.Dict[NNF, NNF]
 
@@ -1197,21 +1191,14 @@ class NNF(metaclass=abc.ABCMeta):
             ['}\n']
         )
 
-    def _models_deterministic(
-            self,
-            *,
-            decomposable: _Tristate = None
-    ) -> t.Iterator[Model]:
+    def _models_deterministic(self) -> t.Iterator[Model]:
         """Model enumeration for deterministic sentences.
 
         Slightly faster for sentences that are also decomposable.
         """
         ModelInt = t.FrozenSet[t.Tuple[Name, bool]]
 
-        if decomposable is None:
-            decomposable = self.decomposable()
-
-        if decomposable:
+        if self.decomposable():
             def compatible(a: ModelInt, b: ModelInt) -> bool:
                 return True
         else:
@@ -1260,7 +1247,7 @@ class NNF(metaclass=abc.ABCMeta):
 
     def _models_decomposable(self) -> t.Iterator[Model]:
         """Model enumeration for decomposable sentences."""
-        if not self.satisfiable(decomposable=True):
+        if not self.satisfiable():
             return
         names = tuple(self.vars())
         model_tree = {}  # type: t.Dict[bool, t.Any]
@@ -1289,23 +1276,67 @@ class NNF(metaclass=abc.ABCMeta):
         for leaf, path in leaves(model_tree):
             yield dict(zip(names, path))
 
-    def is_CNF(self) -> bool:
-        """Return whether the sentence is in the Conjunctive Normal Form."""
-        return isinstance(self, And) and all(child.clause()
-                                             for child in self.children)
+    def is_CNF(self, strict: bool = False) -> bool:
+        """Return whether the sentence is in the Conjunctive Normal Form.
 
-    def is_DNF(self) -> bool:
-        """Return whether the sentence is in the Disjunctive Normal Form."""
+        :param strict: If ``True``, follow the definition of the
+            `Knowledge Compilation Map
+            <https://jair.org/index.php/jair/article/view/10311>`_,
+            requiring that a variable doesn't appear multiple times
+            in a single clause.
+        """
+        if strict:
+            return self._is_CNF_strict()
+        return self._is_CNF_loose()
+
+    @weakref_memoize
+    def _is_CNF_loose(self) -> bool:
+        return isinstance(self, And) and all(
+            isinstance(child, Or)
+            and all(isinstance(grandchild, Var) for grandchild in child)
+            for child in self
+        )
+
+    @weakref_memoize
+    def _is_CNF_strict(self) -> bool:
+        return isinstance(self, And) and all(
+            child.clause() for child in self.children
+        )
+
+    def is_DNF(self, strict: bool = False) -> bool:
+        """Return whether the sentence is in the Disjunctive Normal Form.
+
+        :param strict: If ``True``, follow the definition of the
+            `Knowledge Compilation Map
+            <https://jair.org/index.php/jair/article/view/10311>`_,
+            requiring that a variable doesn't appear multiple times
+            in a single term.
+        """
+        if strict:
+            return self._is_DNF_strict()
+        return self._is_DNF_loose()
+
+    @weakref_memoize
+    def _is_DNF_loose(self) -> bool:
+        return isinstance(self, Or) and all(
+            isinstance(child, And)
+            and all(isinstance(grandchild, Var) for grandchild in child)
+            for child in self
+        )
+
+    @weakref_memoize
+    def _is_DNF_strict(self) -> bool:
         return isinstance(self, Or) and all(child.term()
                                             for child in self.children)
 
+    @weakref_memoize
     def is_MODS(self) -> bool:
         """Return whether the sentence is in MODS form.
 
         MODS sentences are disjunctions of terms representing models,
         making the models trivial to enumerate.
         """
-        return self.is_DNF() and self.smooth()
+        return self.is_DNF(strict=True) and self.smooth()
 
     @abc.abstractmethod
     def _sorting_key(self) -> t.Tuple[t.Any, ...]:

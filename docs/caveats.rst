@@ -44,11 +44,11 @@ Decomposability and determinism
 
 A lot of methods are much faster to perform on sentences that are decomposable or deterministic, such as model enumeration.
 
-Decomposability is automatically detected. However, you can skip the check if you already know whether the sentence is decomposable or not, by passing ``decomposable=True`` or ``decomposable=False`` as a keyword argument.
+Decomposability is automatically detected.
 
-Determinism is too expensive to automatically detect, but it can give a huge speedup. If you know a sentence to be deterministic, pass ``deterministic=True`` as a keyword argument to take advantage.
+Determinism is too expensive to automatically detect, but it can give a huge speedup. If you know a sentence to be deterministic, run ``.mark_deterministic()`` to enable the relevant optimizations.
 
-A compiler like `DSHARP <https://github.com/QuMuLab/dsharp>`_ may be able to convert some sentences into equivalent deterministic decomposable sentences. The output of DSHARP can be loaded using the :mod:`nnf.dsharp` module.
+A compiler like `DSHARP <https://github.com/QuMuLab/dsharp>`_ may be able to convert some sentences into equivalent deterministic decomposable sentences. The output of DSHARP can be loaded using the :mod:`nnf.dsharp` module. Sentences returned by :func:`nnf.dsharp.compile` are automatically marked as deterministic.
 
 Other duplication inefficiencies
 --------------------------------

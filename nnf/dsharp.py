@@ -81,6 +81,8 @@ def compile(
 
     This requires having DSHARP installed.
 
+    The returned sentence will be marked as deterministic.
+
     :param sentence: The CNF sentence to compile.
     :param executable: The path of the ``dsharp`` executable. If the
                        executable is in your PATH there's no need to set this.
@@ -140,4 +142,7 @@ def compile(
     if not out:
         raise RuntimeError("Couldn't read file output. Log:\n\n{}".format(log))
 
-    return loads(out, var_labels=var_labels)
+    result = loads(out, var_labels=var_labels)
+    result.mark_deterministic()
+    NNF.decomposable.memo[result] = True
+    return result
