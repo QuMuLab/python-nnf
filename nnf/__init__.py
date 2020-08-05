@@ -64,18 +64,19 @@ _Tristate = t.Optional[bool]
 # Valid values: native and kissat
 SAT_BACKEND = 'native'
 
+
 class using_kissat():
     """Context manager to use the kissat solver in a block of code."""
 
     def __init__(self) -> None:
         self.setting = SAT_BACKEND
 
-    def __enter__(self):
+    def __enter__(self) -> 'using_kissat':
         global SAT_BACKEND
         SAT_BACKEND = 'kissat'
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
+    def __exit__(self, *_: t.Any) -> None:
         global SAT_BACKEND
         SAT_BACKEND = self.setting
 
