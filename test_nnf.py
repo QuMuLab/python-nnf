@@ -1,5 +1,6 @@
 import copy
 import pickle
+import platform
 import shutil
 import os
 
@@ -13,7 +14,7 @@ from hypothesis import (assume, event, given, strategies as st, settings,
 import nnf
 
 from nnf import (Var, And, Or, amc, dimacs, dsharp, operators,
-                 tseitin, complete_models)
+                 tseitin, complete_models, using_kissat)
 
 settings.register_profile('patient', deadline=2000,
                           suppress_health_check=(HealthCheck.too_slow,))
@@ -821,3 +822,21 @@ def test_complete_models(model: nnf.And[nnf.Var]):
         assert len(multi) == 8
         assert len({frozenset(x.items()) for x in multi}) == 8  # all unique
         assert all(x.keys() == m.keys() | {"test1", "test2"} for x in multi)
+
+if (platform.uname().system, platform.uname().machine) == ('Linux', 'x86_64'):
+
+    def test_kissat_uf20():
+        for sentence in uf20_cnf:
+            with using_kissat():
+                assert sentence.satisfiable()
+
+    @given(CNF())
+    def test_kissat_cnf(sentence: And[Or[Var]]):
+        assume(all(len(clause) > 0 for clause in sentence))
+        with using_kissat():
+            assert sentence.satisfiable() == sentence._cnf_satisfiable_native()
+
+    @given(NNF())
+    def test_kissat_nnf(sentence: And[Or[Var]]):
+        with using_kissat():
+            assert sentence.satisfiable() == tseitin.to_CNF(sentence)._cnf_satisfiable_native()

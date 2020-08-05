@@ -32,7 +32,8 @@ Model = t.Dict[Name, bool]
 
 __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Aux', 'Builder',
            'all_models', 'complete_models', 'decision', 'true', 'false',
-           'dsharp', 'dimacs', 'amc', 'tseitin', 'operators')
+           'dsharp', 'dimacs', 'amc', 'kissat', 'using_kissat', 'tseitin',
+           'operators')
 
 
 def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
@@ -59,6 +60,26 @@ T_NNF = t.TypeVar('T_NNF', bound='NNF')
 U_NNF = t.TypeVar('U_NNF', bound='NNF')
 T_NNF_co = t.TypeVar('T_NNF_co', bound='NNF', covariant=True)
 _Tristate = t.Optional[bool]
+
+# Valid values: native and kissat
+SAT_BACKEND = 'native'
+
+
+class using_kissat():
+    """Context manager to use the kissat solver in a block of code."""
+
+    def __init__(self) -> None:
+        self.setting = SAT_BACKEND
+
+    def __enter__(self) -> 'using_kissat':
+        global SAT_BACKEND
+        SAT_BACKEND = 'kissat'
+        return self
+
+    def __exit__(self, *_: t.Any) -> None:
+        global SAT_BACKEND
+        SAT_BACKEND = self.setting
+
 
 if t.TYPE_CHECKING:
     def memoize(func: T) -> T:
@@ -264,10 +285,9 @@ class NNF(metaclass=abc.ABCMeta):
 
         if cnf:
             return self._cnf_satisfiable()
-
-        # todo: use a better fallback
-        return any(self.satisfied_by(model)
-                   for model in all_models(self.vars()))
+        else:
+            from nnf import tseitin
+            return tseitin.to_CNF(self)._cnf_satisfiable()
 
     def _satisfiable_decomposable(self) -> bool:
         """Checks satisfiability of decomposable sentences.
@@ -596,6 +616,16 @@ class NNF(metaclass=abc.ABCMeta):
         return tseitin.to_CNF(self)
 
     def _cnf_satisfiable(self) -> bool:
+        """Call a SAT solver on the presumed CNF theory."""
+        if SAT_BACKEND == 'native':
+            return self._cnf_satisfiable_native()
+        elif SAT_BACKEND == 'kissat':
+            from nnf import kissat
+            return kissat.solve(t.cast(And[Or[Var]], self)) is not None
+        else:
+            raise NotImplementedError('Unrecognized SAT backend: '+SAT_BACKEND)
+
+    def _cnf_satisfiable_native(self) -> bool:
         """A naive DPLL SAT solver."""
         def DPLL(clauses: t.FrozenSet[t.FrozenSet[Var]]) -> bool:
             if not clauses:

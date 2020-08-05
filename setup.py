@@ -46,4 +46,6 @@ setuptools.setup(
         'Documentation': "https://python-nnf.readthedocs.io/",
         'Source': "https://github.com/QuMuLab/python-nnf",
     },
+    include_package_data=True,
+    zip_safe=False,
 )
