@@ -32,7 +32,8 @@ Model = t.Dict[Name, bool]
 
 __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Aux', 'Builder',
            'all_models', 'complete_models', 'decision', 'true', 'false',
-           'dsharp', 'dimacs', 'amc', 'kissat', 'tseitin', 'operators')
+           'dsharp', 'dimacs', 'amc', 'kissat', 'using_kissat', 'tseitin',
+           'operators')
 
 
 def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
@@ -62,6 +63,22 @@ _Tristate = t.Optional[bool]
 
 # Valid values: native and kissat
 SAT_BACKEND = 'native'
+
+class using_kissat():
+    """Context manager to use the kissat solver in a block of code."""
+
+    def __init__(self) -> None:
+        self.setting = SAT_BACKEND
+
+    def __enter__(self):
+        global SAT_BACKEND
+        SAT_BACKEND = 'kissat'
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        global SAT_BACKEND
+        SAT_BACKEND = self.setting
+
 
 if t.TYPE_CHECKING:
     def memoize(func: T) -> T:
