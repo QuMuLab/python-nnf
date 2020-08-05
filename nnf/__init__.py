@@ -318,9 +318,8 @@ class NNF(metaclass=abc.ABCMeta):
 
         if self.is_CNF():
             return self._cnf_satisfiable()
-        else:
-            from nnf import tseitin
-            return tseitin.to_CNF(self)._cnf_satisfiable()
+
+        return self.to_CNF()._cnf_satisfiable()
 
     def _satisfiable_decomposable(self) -> bool:
         """Checks satisfiability of decomposable sentences.
