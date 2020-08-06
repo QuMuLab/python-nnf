@@ -998,16 +998,16 @@ class NNF(metaclass=abc.ABCMeta):
 
         return pair(sentence)
 
-    def project(self: T_NNF, vars: 't.FrozenSet[Name]') -> 'NNF':
-        """Dual of `forget`: will forget all of the variables not given"""
-        return self.forget(self.vars() - vars)
+    def project(self: T_NNF, names: 't.FrozenSet[Name]') -> 'NNF':
+        """Dual of :meth:``forget``: will forget all variables not given"""
+        return self.forget(self.vars() - names)
 
     def forget_aux(self: T_NNF) -> 'NNF':
         """Returns a theory that forgets all of the auxillary variables"""
         aux_vars = frozenset({v for v in self.vars() if isinstance(v, Aux)})
         return self.forget(aux_vars)
 
-    def forget(self: T_NNF, vars: 't.FrozenSet[Name]') -> 'NNF':
+    def forget(self: T_NNF, names: 't.FrozenSet[Name]') -> 'NNF':
         """Forget a set of variables from the theory.
 
         Has the effect of returning a theory without the variables provided,
@@ -1015,19 +1015,19 @@ class NNF(metaclass=abc.ABCMeta):
         assignment) to the forgotten variables that is a model of the original
         theory.
 
-        :param vars: A frozenset of the variable names to be forgotten
+        :param names: A frozenset of the variable names to be forgotten
         """
 
         if self.decomposable():
-            return self._forget_with_subs(vars)
+            return self._forget_with_subs(names)
         else:
-            return self._forget_with_shannon(vars)
+            return self._forget_with_shannon(names)
 
-    def _forget_with_subs(self: T_NNF, vars: 't.FrozenSet[Name]') -> 'NNF':
+    def _forget_with_subs(self: T_NNF, names: 't.FrozenSet[Name]') -> 'NNF':
 
         @memoize
         def forget_recurse(node: NNF) -> NNF:
-            if isinstance(node, Var) and node.name in vars:
+            if isinstance(node, Var) and node.name in names:
                 return true
             elif isinstance(node, Var):
                 return node
