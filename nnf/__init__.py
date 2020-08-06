@@ -998,6 +998,53 @@ class NNF(metaclass=abc.ABCMeta):
 
         return pair(sentence)
 
+    def project(self: T_NNF, vars: 't.FrozenSet[Name]') -> 'NNF':
+        """Dual of `forget`: will forget all of the variables not given"""
+        return self.forget(self.vars() - vars)
+
+    def forget_aux(self: T_NNF) -> 'NNF':
+        """Returns a theory that forgets all of the auxillary variables"""
+        aux_vars = frozenset({v for v in self.vars() if isinstance(v, Aux)})
+        return self.forget(aux_vars)
+
+    def forget(self: T_NNF, vars: 't.FrozenSet[Name]') -> 'NNF':
+        """Forget a set of variables from the theory.
+
+        Has the effect of returning a theory without the variables provided,
+        such that every model of the new theory has an extension (i.e., an
+        assignment) to the forgotten variables that is a model of the original
+        theory.
+
+        :param vars: A frozenset of the variable names to be forgotten
+        """
+
+        if self.decomposable():
+            return self._forget_with_subs(vars)
+        else:
+            return self._forget_with_shannon(vars)
+
+    def _forget_with_subs(self: T_NNF, vars: 't.FrozenSet[Name]') -> 'NNF':
+
+        @memoize
+        def forget_recurse(node: NNF) -> NNF:
+            if isinstance(node, Var) and node.name in vars:
+                return true
+            elif isinstance(node, Var):
+                return node
+            elif isinstance(node, And) or isinstance(node, Or):
+                new_children = map(forget_recurse, node.children)
+                return node.__class__(new_children)
+            else:
+                raise TypeError(node)
+
+        return forget_recurse(self).simplify()
+
+    def _forget_with_shannon(self: T_NNF, vars: 't.FrozenSet[Name]') -> 'NNF':
+        T = self
+        for v in vars:
+            T = t.cast(T_NNF, T.condition({v: True}) | T.condition({v: False}))
+        return T.simplify()
+
     def deduplicate(self: T_NNF) -> T_NNF:
         """Return a copy of the sentence without any duplicate objects.
 
