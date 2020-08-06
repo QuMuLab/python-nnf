@@ -807,7 +807,7 @@ class NNF(metaclass=abc.ABCMeta):
         the sentence that are strict subsets of any of the clauses in this
         representation, so no clauses could be made smaller.
 
-        While :meth:`NNF.implicants` returns all implicants, this method may
+        While :meth:`implicants` returns all implicants, this method may
         only return some of the implicates.
         """
         return And(self._do_PI()[1])
@@ -1042,7 +1042,7 @@ class NNF(metaclass=abc.ABCMeta):
         duplication.
 
         It's better to avoid the duplication in the first place. This method is
-        for diagnostic purposes, in combination with :meth:`NNF.object_count`.
+        for diagnostic purposes, in combination with :meth:`object_count`.
         """
         new_nodes = {}  # type: t.Dict[NNF, NNF]
 
