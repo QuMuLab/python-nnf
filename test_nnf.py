@@ -666,6 +666,7 @@ def test_implicates_implicants_negation_rule(sentence: nnf.NNF):
     So sentence.negate().implicants().negate() gives all implicates,
     and sentence.negate().implicates().negate() gives some implicants.
     """
+    assume(sentence.size() <= 30)
     assert (
         sentence.negate().implicants().negate().children
         >= sentence.implicates().children
