@@ -321,7 +321,9 @@ def test_arbitrary_dimacs_sat_serialize(sentence: nnf.NNF):
 @given(CNF())
 def test_arbitrary_dimacs_cnf_serialize(sentence: nnf.And):
     assume(all(len(clause.children) > 0 for clause in sentence.children))
-    assert dimacs.loads(dimacs.dumps(sentence, mode='cnf')) == sentence
+    reloaded = dimacs.loads(dimacs.dumps(sentence, mode='cnf'))
+    assert reloaded.is_CNF()
+    assert reloaded == sentence
 
 
 @given(NNF())
@@ -601,6 +603,9 @@ def test_to_MODS(sentence: nnf.NNF):
     assume(len(sentence.vars()) <= 5)
     mods = sentence.to_MODS()
     assert mods.is_MODS()
+    assert mods.is_DNF()
+    assert mods.is_DNF(strict=True)
+    assert mods.smooth()
     assert isinstance(mods, Or)
     assert mods.model_count() == len(mods.children)
 
@@ -874,6 +879,7 @@ def test_tseitin(sentence: nnf.NNF):
 
     T = tseitin.to_CNF(sentence)
     assert T.is_CNF()
+    assert T.is_CNF(strict=True)
     assert T.forget_aux().equivalent(sentence)
 
     models = list(complete_models(T.models(), sentence.vars() | T.vars()))
