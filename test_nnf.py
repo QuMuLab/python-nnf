@@ -734,6 +734,36 @@ def test_iff(a: nnf.NNF, b: nnf.NNF):
 
 
 @given(NNF())
+def test_forget(sentence: nnf.NNF):
+    # Assumption to reduce the time in testing
+    assume(sentence.size() <= 15)
+
+    # Test that forgetting a backbone variable doesn't change the theory
+    T = sentence & Var('added_var')
+    assert sentence.equivalent(T.forget({'added_var'}))
+
+    # Test the tseitin projection
+    assert sentence.equivalent(sentence.to_CNF().forget_aux())
+
+    # Test that models of a projected theory are consistent with the original
+    names = list(sentence.vars())[:2]
+    T = sentence.forget(names)
+    assert not any([v in T.vars() for v in names])
+
+    for m in T.models():
+        assert sentence.condition(m).satisfiable()
+
+
+@given(NNF())
+def test_project(sentence: nnf.NNF):
+    # Test that we get the same as projecting and forgetting
+    assume(len(sentence.vars()) > 3)
+    vars1 = list(sentence.vars())[:2]
+    vars2 = list(sentence.vars())[2:]
+    assert sentence.forget(vars1).equivalent(sentence.project(vars2))
+
+
+@given(NNF())
 def test_pickling(sentence: nnf.NNF):
     new = pickle.loads(pickle.dumps(sentence))
     assert sentence == new
@@ -789,11 +819,7 @@ def test_tseitin(sentence: nnf.NNF):
 
     T = tseitin.to_CNF(sentence)
     assert T.is_CNF()
-
-    # TODO: Once forgetting/projection is implemented,
-    #       do this more complete check
-    # aux = filter(lambda x: 'aux' in str(x.name), T.vars())
-    # assert T.forget(aux).equivalent(sentence)
+    assert T.forget_aux().equivalent(sentence)
 
     models = list(complete_models(T.models(), sentence.vars() | T.vars()))
 

@@ -998,6 +998,53 @@ class NNF(metaclass=abc.ABCMeta):
 
         return pair(sentence)
 
+    def project(self, names: 't.Iterable[Name]') -> 'NNF':
+        """Dual of :meth:`forget`: will forget all variables not given"""
+        return self.forget(self.vars() - frozenset(names))
+
+    def forget_aux(self) -> 'NNF':
+        """Returns a theory that forgets all of the auxillary variables"""
+        return self.forget(v for v in self.vars() if isinstance(v, Aux))
+
+    def forget(self, names: 't.Iterable[Name]') -> 'NNF':
+        """Forget a set of variables from the theory.
+
+        Has the effect of returning a theory without the variables provided,
+        such that every model of the new theory has an extension (i.e., an
+        assignment) to the forgotten variables that is a model of the original
+        theory.
+
+        :param names: An iterable of the variable names to be forgotten
+        """
+
+        if self.decomposable():
+            return self._forget_with_subs(names)
+        else:
+            return self._forget_with_shannon(names)
+
+    def _forget_with_subs(self, names: 't.Iterable[Name]') -> 'NNF':
+
+        names = frozenset(names)
+
+        @memoize
+        def forget_recurse(node: NNF) -> NNF:
+            if isinstance(node, Var) and node.name in names:
+                return true
+            elif isinstance(node, Var):
+                return node
+            elif isinstance(node, Internal):
+                return node.map(forget_recurse)
+            else:
+                raise TypeError(node)
+
+        return forget_recurse(self).simplify()
+
+    def _forget_with_shannon(self, names: 't.Iterable[Name]') -> 'NNF':
+        T = self
+        for v in frozenset(names) & self.vars():
+            T = T.condition({v: True}) | T.condition({v: False})
+        return T.simplify()
+
     def deduplicate(self: T_NNF) -> T_NNF:
         """Return a copy of the sentence without any duplicate objects.
 
