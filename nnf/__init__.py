@@ -999,7 +999,7 @@ class NNF(metaclass=abc.ABCMeta):
         return pair(sentence)
 
     def project(self, names: 't.Iterable[Name]') -> 'NNF':
-        """Dual of :meth:`forget: will forget all variables not given"""
+        """Dual of :meth:`forget`: will forget all variables not given"""
         return self.forget(self.vars() - frozenset(names))
 
     def forget_aux(self) -> 'NNF':
