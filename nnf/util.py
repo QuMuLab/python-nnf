@@ -29,34 +29,9 @@ else:
 memoize = t.cast(t.Callable[[T], T], functools.lru_cache(maxsize=None))
 
 
-class _WeakrefMemoized(t.Generic[T_NNF, T]):
-    def __init__(self) -> None:
-        assert t.TYPE_CHECKING, "Not a real class"
-        self.memo = NotImplemented  # type: weakref.WeakKeyDictionary[T_NNF, T]
-        self.__wrapped__ = NotImplemented  # type: t.Callable[[T_NNF], T]
-
-    @t.overload
-    def __get__(self: U, instance: None, owner: t.Type[T_NNF]) -> "U":
-        ...
-
-    @t.overload  # noqa: F811
-    def __get__(  # noqa: F811
-        self, instance: T_NNF, owner: t.Optional[t.Type[T_NNF]] = None
-    ) -> t.Callable[[], T]:
-        ...
-
-    def __get__(  # noqa: F811
-        self, instance: object, owner: object = None
-    ) -> t.Any:
-        ...
-
-    def __call__(self, sentence: T_NNF) -> T:
-        ...
-
-
 def weakref_memoize(
     func: t.Callable[[T_NNF], T]
-) -> _WeakrefMemoized[T_NNF, T]:
+) -> "_WeakrefMemoized[T_NNF, T]":
     """Make a function cache its return values using weakrefs.
 
     This makes it possible to remember sentences' properties without keeping
@@ -102,4 +77,34 @@ def weakref_memoize(
             return ret
 
     wrapped.memo = memo  # type: ignore
+    wrapped.set = memo.__setitem__  # type: ignore
     return t.cast(_WeakrefMemoized[T_NNF, T], wrapped)
+
+
+class _WeakrefMemoized(t.Generic[T_NNF, T]):
+    """Fake class for typechecking. Should never be instantiated."""
+    def __init__(self) -> None:
+        assert t.TYPE_CHECKING, "Not a real class"
+        self.memo = NotImplemented  # type: weakref.WeakKeyDictionary[T_NNF, T]
+        self.__wrapped__ = NotImplemented  # type: t.Callable[[T_NNF], T]
+
+    @t.overload
+    def __get__(self: U, instance: None, owner: t.Type[T_NNF]) -> "U":
+        ...
+
+    @t.overload  # noqa: F811
+    def __get__(  # noqa: F811
+        self, instance: T_NNF, owner: t.Optional[t.Type[T_NNF]] = None
+    ) -> t.Callable[[], T]:
+        ...
+
+    def __get__(  # noqa: F811
+        self, instance: object, owner: object = None
+    ) -> t.Any:
+        ...
+
+    def __call__(self, sentence: T_NNF) -> T:
+        ...
+
+    def set(self, sentence: T_NNF, value: T) -> None:
+        ...

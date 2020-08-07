@@ -313,5 +313,5 @@ def _parse_cnf(tokens: t.Iterable[str]) -> And[Or[Var]]:
         # Adding an empty clause is not desirable
         clauses.add(Or(clause))
     sentence = And(clauses)
-    NNF._is_CNF_loose.memo[sentence] = True
+    NNF._is_CNF_loose.set(sentence, True)
     return sentence

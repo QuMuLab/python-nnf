@@ -726,9 +726,9 @@ class NNF(metaclass=abc.ABCMeta):
             And(Var(name, val) for name, val in model.items())
             for model in self.models()
         )
-        NNF.is_MODS.memo[new] = True
-        NNF._is_DNF_loose.memo[new] = True
-        NNF._is_DNF_strict.memo[new] = True
+        NNF.is_MODS.set(new, True)
+        NNF._is_DNF_loose.set(new, True)
+        NNF._is_DNF_strict.set(new, True)
         return new
 
     def to_model(self) -> Model:
@@ -810,7 +810,7 @@ class NNF(metaclass=abc.ABCMeta):
             return new
 
         ret = smooth(self)
-        NNF.smooth.memo[ret] = True
+        NNF.smooth.set(ret, True)
         return ret
 
     def simplify(self, merge_nodes: bool = True) -> 'NNF':

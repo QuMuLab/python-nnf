@@ -144,5 +144,5 @@ def compile(
 
     result = loads(out, var_labels=var_labels)
     result.mark_deterministic()
-    NNF.decomposable.memo[result] = True
+    NNF.decomposable.set(result, True)
     return result

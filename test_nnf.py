@@ -3,6 +3,7 @@ import pickle
 import platform
 import shutil
 import os
+import types
 
 from pathlib import Path
 
@@ -15,6 +16,15 @@ import nnf
 
 from nnf import (Var, And, Or, amc, dimacs, dsharp, operators,
                  tseitin, complete_models, using_kissat)
+
+memoized = [
+    method
+    for method in vars(nnf.NNF).values()
+    if isinstance(method, types.FunctionType) and hasattr(method, "memo")
+]
+assert memoized, "No memoized methods found, did the implementation change?"
+for method in memoized:
+    method.set = lambda *args: None  # type: ignore
 
 settings.register_profile('patient', deadline=2000,
                           suppress_health_check=(HealthCheck.too_slow,))
@@ -357,7 +367,6 @@ def test_dsharp_output(fname: str):
         sentence = dsharp.load(f)
     with open(basepath + '.cnf') as f:
         clauses = dimacs.load(f)
-    nnf.NNF.decomposable.memo.clear()
     assert sentence.decomposable()
     # this is not a complete check, but clauses.models() is very expensive
     assert all(clauses.satisfied_by(model) for model in sentence.models())
@@ -464,7 +473,6 @@ def test_smoothing(sentence: nnf.NNF):
         event("Sentence not smooth yet")
         smoothed = sentence.make_smooth()
         assert type(sentence) is type(smoothed)
-        nnf.NNF.smooth.memo.clear()
         assert smoothed.smooth()
         assert sentence.equivalent(smoothed)
         assert smoothed.make_smooth() == smoothed
@@ -528,6 +536,7 @@ def test_model_counting(sentence: nnf.NNF):
 
 def test_uf20_model_counting():
     for sentence in uf20:
+        assert sentence.model_count() == len(list(sentence.models()))
         sentence.mark_deterministic()
         assert sentence.model_count() == len(list(sentence.models()))
 
@@ -546,6 +555,7 @@ def test_validity(sentence: nnf.NNF):
 
 def test_uf20_validity():
     for sentence in uf20:
+        assert not sentence.valid()
         sentence.mark_deterministic()
         assert not sentence.valid()
 
@@ -590,8 +600,6 @@ def test_is_DNF_examples():
 def test_to_MODS(sentence: nnf.NNF):
     assume(len(sentence.vars()) <= 5)
     mods = sentence.to_MODS()
-    nnf.NNF.is_MODS.memo.clear()
-    nnf.NNF._is_DNF_strict.memo.clear()
     assert mods.is_MODS()
     assert isinstance(mods, Or)
     assert mods.model_count() == len(mods.children)
@@ -807,8 +815,6 @@ if shutil.which('dsharp') is not None:
         for sentence in uf20_cnf:
             compiled = dsharp.compile(sentence)
             compiled_smooth = dsharp.compile(sentence, smooth=True)
-            nnf.NNF.decomposable.memo.clear()
-            nnf.NNF.smooth.memo.clear()
             assert sentence.equivalent(compiled)
             assert sentence.equivalent(compiled_smooth)
             assert compiled.decomposable()
@@ -820,8 +826,6 @@ if shutil.which('dsharp') is not None:
         assume(all(len(clause) > 0 for clause in sentence))
         compiled = dsharp.compile(sentence)
         compiled_smooth = dsharp.compile(sentence, smooth=True)
-        nnf.NNF.decomposable.memo.clear()
-        nnf.NNF.smooth.memo.clear()
         assert compiled.decomposable()
         assert compiled_smooth.decomposable()
         assert compiled_smooth.smooth()
@@ -869,7 +873,6 @@ def test_tseitin(sentence: nnf.NNF):
     assume(sentence.size() <= 10)
 
     T = tseitin.to_CNF(sentence)
-    nnf.NNF.is_CNF.memo.clear()
     assert T.is_CNF()
     assert T.forget_aux().equivalent(sentence)
 
