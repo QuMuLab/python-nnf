@@ -998,16 +998,15 @@ class NNF(metaclass=abc.ABCMeta):
 
         return pair(sentence)
 
-    def project(self: T_NNF, names: 't.FrozenSet[Name]') -> 'NNF':
-        """Dual of :meth:``forget``: will forget all variables not given"""
-        return self.forget(self.vars() - names)
+    def project(self, names: 't.Iterable[Name]') -> 'NNF':
+        """Dual of :meth:`forget: will forget all variables not given"""
+        return self.forget(self.vars() - frozenset(names))
 
-    def forget_aux(self: T_NNF) -> 'NNF':
+    def forget_aux(self) -> 'NNF':
         """Returns a theory that forgets all of the auxillary variables"""
-        aux_vars = frozenset({v for v in self.vars() if isinstance(v, Aux)})
-        return self.forget(aux_vars)
+        return self.forget(v for v in self.vars() if isinstance(v, Aux))
 
-    def forget(self: T_NNF, names: 't.FrozenSet[Name]') -> 'NNF':
+    def forget(self, names: 't.Iterable[Name]') -> 'NNF':
         """Forget a set of variables from the theory.
 
         Has the effect of returning a theory without the variables provided,
@@ -1015,7 +1014,7 @@ class NNF(metaclass=abc.ABCMeta):
         assignment) to the forgotten variables that is a model of the original
         theory.
 
-        :param names: A frozenset of the variable names to be forgotten
+        :param names: An iterable of the variable names to be forgotten
         """
 
         if self.decomposable():
@@ -1023,7 +1022,9 @@ class NNF(metaclass=abc.ABCMeta):
         else:
             return self._forget_with_shannon(names)
 
-    def _forget_with_subs(self: T_NNF, names: 't.FrozenSet[Name]') -> 'NNF':
+    def _forget_with_subs(self, names: 't.Iterable[Name]') -> 'NNF':
+
+        names = frozenset(names)
 
         @memoize
         def forget_recurse(node: NNF) -> NNF:
@@ -1031,18 +1032,17 @@ class NNF(metaclass=abc.ABCMeta):
                 return true
             elif isinstance(node, Var):
                 return node
-            elif isinstance(node, And) or isinstance(node, Or):
-                new_children = map(forget_recurse, node.children)
-                return node.__class__(new_children)
+            elif isinstance(node, Internal):
+                return node.map(forget_recurse)
             else:
                 raise TypeError(node)
 
         return forget_recurse(self).simplify()
 
-    def _forget_with_shannon(self: T_NNF, vars: 't.FrozenSet[Name]') -> 'NNF':
+    def _forget_with_shannon(self, names: 't.Iterable[Name]') -> 'NNF':
         T = self
-        for v in vars:
-            T = t.cast(T_NNF, T.condition({v: True}) | T.condition({v: False}))
+        for v in frozenset(names) & self.vars():
+            T = T.condition({v: True}) | T.condition({v: False})
         return T.simplify()
 
     def deduplicate(self: T_NNF) -> T_NNF:
