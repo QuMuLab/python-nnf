@@ -1,11 +1,9 @@
 import copy
+import pathlib
 import pickle
 import platform
 import shutil
-import os
 import types
-
-from pathlib import Path
 
 import pytest
 
@@ -35,15 +33,10 @@ a, b, c = Var('a'), Var('b'), Var('c')
 fig1a = (~a & b) | (a & ~b)
 fig1b = (~a | ~b) & (a | b)
 
-uf20 = [
-    dsharp.load(file.open())
-    for file in (Path(os.path.dirname(__file__))
-                 / 'testdata' / 'satlib' / 'uf20').glob('*.nnf')
-]
+satlib = pathlib.Path(__file__).parent / "testdata" / "satlib"
+uf20 = [dsharp.load(file.open()) for file in (satlib / "uf20").glob("*.nnf")]
 uf20_cnf = [
-    dimacs.load(file.open())
-    for file in (Path(os.path.dirname(__file__))
-                 / 'testdata' / 'satlib' / 'uf20').glob('*.cnf')
+    dimacs.load(file.open()) for file in (satlib / "uf20").glob("*.cnf")
 ]
 
 
@@ -345,22 +338,15 @@ def test_dimacs_cnf_serialize_accepts_only_cnf(sentence: nnf.NNF):
     ]
 )
 def test_cnf_benchmark_data(fname: str, clauses: int):
-    with open(os.path.dirname(__file__) + '/testdata/satlib/' + fname) as f:
+    with (satlib / fname).open() as f:
         sentence = dimacs.load(f)
     assert isinstance(sentence, And) and len(sentence.children) == clauses
 
 
-@pytest.mark.parametrize(
-    'fname',
-    [
-        'uf20-01'
-    ]
-)
-def test_dsharp_output(fname: str):
-    basepath = os.path.dirname(__file__) + '/testdata/satlib/' + fname
-    with open(basepath + '.nnf') as f:
+def test_dsharp_output():
+    with open(satlib / "uf20-01.nnf") as f:
         sentence = dsharp.load(f)
-    with open(basepath + '.cnf') as f:
+    with open(satlib / "uf20-01.cnf") as f:
         clauses = dimacs.load(f)
     assert sentence.decomposable()
     # this is not a complete check, but clauses.models() is very expensive
