@@ -19,6 +19,7 @@ import functools
 import itertools
 import operator
 import os
+import threading
 import typing as t
 import uuid
 import weakref
@@ -35,6 +36,7 @@ from nnf.util import (
     Bottom,
     Name,
     Model,
+    T,
 )
 
 if t.TYPE_CHECKING:
@@ -43,7 +45,7 @@ if t.TYPE_CHECKING:
 
 __all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Aux', 'Builder',
            'all_models', 'complete_models', 'decision', 'true', 'false',
-           'dsharp', 'dimacs', 'amc', 'kissat', 'using_kissat', 'tseitin',
+           'dsharp', 'dimacs', 'amc', 'kissat', 'config', 'tseitin',
            'operators')
 
 
@@ -64,26 +66,6 @@ def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
             new = model.copy()
             new[name] = True
             yield new
-
-
-# Valid values: native and kissat
-SAT_BACKEND = 'native'
-
-
-class using_kissat():
-    """Context manager to use the kissat solver in a block of code."""
-
-    def __init__(self) -> None:
-        self.setting = SAT_BACKEND
-
-    def __enter__(self) -> 'using_kissat':
-        global SAT_BACKEND
-        SAT_BACKEND = 'kissat'
-        return self
-
-    def __exit__(self, *_: t.Any) -> None:
-        global SAT_BACKEND
-        SAT_BACKEND = self.setting
 
 
 class NNF(metaclass=abc.ABCMeta):
@@ -504,13 +486,11 @@ class NNF(metaclass=abc.ABCMeta):
 
     def _cnf_satisfiable(self) -> bool:
         """Call a SAT solver on the presumed CNF theory."""
-        if SAT_BACKEND == 'native':
+        if config.sat_backend in {"native", "auto"}:
             return self._cnf_satisfiable_native()
-        elif SAT_BACKEND == 'kissat':
-            from nnf import kissat
+        elif config.sat_backend == "kissat":
             return kissat.solve(t.cast(And[Or[Var]], self)) is not None
-        else:
-            raise NotImplementedError('Unrecognized SAT backend: '+SAT_BACKEND)
+        raise AssertionError(config.sat_backend)
 
     def _cnf_satisfiable_native(self) -> bool:
         """A naive DPLL SAT solver."""
@@ -1657,6 +1637,112 @@ class Builder:
     def Or(self, children: t.Iterable[T_NNF] = ()) -> 'nnf.Or[T_NNF]':
         ret = Or(children)
         return self.stored.setdefault(ret, ret)  # type: ignore
+
+
+class _Setting(t.Generic[T]):
+    """Use the descriptor protocol for a smart settings system."""
+    def __init__(
+        self, default: T, choices: t.Optional[t.Set[T]] = None
+    ) -> None:
+        self.choices = choices
+        self.default = default
+        self.local = threading.local()
+        self.name = None  # type: t.Optional[str]
+
+    def __set_name__(self, owner: object, name: str) -> None:
+        self.name = name
+
+    def __get__(self, instance: object, owner: object = None) -> T:
+        return getattr(self.local, "value", self.default)  # type: ignore
+
+    def __set__(self, instance: object, value: T) -> None:
+        if self.choices is not None and value not in self.choices:
+            if self.name is None:
+                raise ValueError("Invalid value {!r}".format(value))
+            raise ValueError(
+                "Invalid value {!r} for setting {!r}".format(value, self.name)
+            )
+        self.local.value = value
+
+
+_Func = t.TypeVar("_Func", bound=t.Callable[..., object])
+
+
+class _ConfigContext:
+    """An object to apply configuration as a context manager or decorator."""
+    def __init__(self, settings: t.Dict[str, t.Any]) -> None:
+        self.settings = settings
+        self.old_settings = threading.local()
+
+    def __enter__(self) -> None:
+        self.old_settings.__dict__.setdefault("stack", []).append(
+            {name: getattr(config, name) for name in self.settings}
+        )
+        for name, value in self.settings.items():
+            setattr(config, name, value)
+
+    def __exit__(self, *exc: object) -> None:
+        for name, value in self.old_settings.stack.pop().items():
+            setattr(config, name, value)
+
+    def __call__(self, func: _Func) -> _Func:
+        @functools.wraps(func)
+        def newfunc(*args: t.Any, **kwargs: t.Any) -> t.Any:
+            with self:
+                return func(*args, **kwargs)
+
+        return newfunc  # type: ignore
+
+
+class _Config:
+    """Configuration management.
+
+    We need to instantiate this class to make the __set__ part of the
+    descriptor protocol work and to take advantage of __slots__ so people can't
+    misspell a setting without noticing.
+    """
+
+    # Remember to update the doc comment below whenever adding a setting
+    sat_backend = _Setting("auto", {"auto", "native", "kissat"})
+
+    __slots__ = ()
+
+    def __call__(self, **settings: str) -> _ConfigContext:
+        return _ConfigContext(settings)
+
+
+#: Configuration management.
+#:
+#: There are three ways to change a setting. Scoped::
+#:
+#:   >>> with config(sat_backend="native"):
+#:   ...     do_something()
+#:
+#: Indefinite::
+#:
+#:   >>> config.sat_backend = "native"
+#:   >>> do_something()
+#:
+#: And as a decorator::
+#:
+#:   >>> @config(sat_backend="native")
+#:   ... def some_func():
+#:   ...     do_something()
+#:
+#: Configuration is isolated per thread.
+#:
+#: The following settings are available:
+#:
+#: - ``sat_backend``: The backend used for SAT solving. Implicitly used by
+#:   many methods.
+#:
+#:   - ``native``: A slow Python implementation. Always available.
+#:   - ``pysat``: An implementation using the PySAT library. Generally faster
+#:     than ``native``. Only available if the library is installed.
+#:   - ``kissat``: An implementation using `kissat` as an external program.
+#:     Fast, but high overhead, so relatively slow on small problems.
+#:   - ``auto`` (default): Use ``pysat`` if available, otherwise ``native``.
+config = _Config()
 
 
 from nnf import amc, dsharp, kissat, operators, tseitin  # noqa: E402

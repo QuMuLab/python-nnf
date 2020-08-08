@@ -3,6 +3,7 @@ import pathlib
 import pickle
 import platform
 import shutil
+import threading
 import types
 
 import pytest
@@ -13,7 +14,7 @@ from hypothesis import (assume, event, given, strategies as st, settings,
 import nnf
 
 from nnf import (Var, And, Or, amc, dimacs, dsharp, operators,
-                 tseitin, complete_models, using_kissat)
+                 tseitin, complete_models, config)
 
 memoized = [
     method
@@ -38,6 +39,9 @@ uf20 = [dsharp.load(file.open()) for file in (satlib / "uf20").glob("*.nnf")]
 uf20_cnf = [
     dimacs.load(file.open()) for file in (satlib / "uf20").glob("*.cnf")
 ]
+
+# Test config default value before the tests start mucking with the state
+assert config.sat_backend == "auto"
 
 
 def test_all_models_basic():
@@ -892,20 +896,102 @@ def test_complete_models(model: nnf.And[nnf.Var]):
 
 if (platform.uname().system, platform.uname().machine) == ('Linux', 'x86_64'):
 
+    @config(sat_backend="kissat")
     def test_kissat_uf20():
         for sentence in uf20_cnf:
-            with using_kissat():
-                assert sentence.satisfiable()
+            assert sentence.satisfiable()
 
+    @config(sat_backend="kissat")
     @given(CNF())
     def test_kissat_cnf(sentence: And[Or[Var]]):
-        with using_kissat():
-            assert sentence.satisfiable() == sentence._cnf_satisfiable_native()
+        assert sentence.satisfiable() == sentence._cnf_satisfiable_native()
 
+    @config(sat_backend="kissat")
     @given(NNF())
     def test_kissat_nnf(sentence: And[Or[Var]]):
-        with using_kissat():
-            assert (
-                sentence.satisfiable()
-                == tseitin.to_CNF(sentence)._cnf_satisfiable_native()
-            )
+        assert (
+            sentence.satisfiable()
+            == tseitin.to_CNF(sentence)._cnf_satisfiable_native()
+        )
+
+
+@config(sat_backend="auto")
+def test_config():
+    assert config.sat_backend == "auto"
+
+    # Imperative style works
+    config.sat_backend = "native"
+    assert config.sat_backend == "native"
+
+    # Context manager works
+    with config(sat_backend="kissat"):
+        assert config.sat_backend == "kissat"
+    assert config.sat_backend == "native"
+
+    # Bad values are caught
+    with pytest.raises(ValueError):
+        config.sat_backend = "invalid"
+
+    # In context managers too, before we enter
+    with pytest.raises(ValueError):
+        with config(sat_backend="invalid"):
+            assert False
+
+    config.sat_backend = "kissat"
+    assert config.sat_backend == "kissat"
+
+    # Old value is restored when we leave, even if changed inside
+    # (this may or may not be desirable behavior, but if it changes
+    # we should know)
+    with config(sat_backend="native"):
+        assert config.sat_backend == "native"
+        config.sat_backend = "auto"
+        assert config.sat_backend == "auto"
+    assert config.sat_backend == "kissat"
+
+    # Bad settings are caught
+    with pytest.raises(AttributeError):
+        config.invalid = "somevalue"
+
+    # Decorator works
+    @config(sat_backend="native")
+    def somefunc(recurse=False):
+        assert config.sat_backend == "native"
+        if recurse:
+            # Even if we call it again while it's in progress
+            config.sat_backend = "auto"
+            somefunc(recurse=False)
+            assert config.sat_backend == "auto"
+
+    somefunc()
+    assert config.sat_backend == "kissat"
+    somefunc(recurse=True)
+    assert config.sat_backend == "kissat"
+
+    # Context managers can be reused and nested without getting confused
+    reentrant_cm = config(sat_backend="auto")
+    assert config.sat_backend == "kissat"
+    with reentrant_cm:
+        assert config.sat_backend == "auto"
+        config.sat_backend = "native"
+        with reentrant_cm:
+            assert config.sat_backend == "auto"
+        assert config.sat_backend == "native"
+    assert config.sat_backend == "kissat"
+
+
+@config(sat_backend="auto")
+def test_config_multithreading():
+    # Settings from one thread don't affect another
+    config.sat_backend = "native"
+
+    def f():
+        assert config.sat_backend == "auto"
+        config.sat_backend = "kissat"
+        assert config.sat_backend == "kissat"
+
+    thread = threading.Thread(target=f)
+    thread.start()
+    thread.join()
+
+    assert config.sat_backend == "native"
