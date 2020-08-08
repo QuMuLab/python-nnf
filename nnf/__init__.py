@@ -500,7 +500,6 @@ class NNF(metaclass=abc.ABCMeta):
 
     def to_CNF(self) -> 'And[Or[Var]]':
         """Compile theory to a semantically equivalent CNF formula."""
-        from nnf import tseitin
         return tseitin.to_CNF(self)
 
     def _cnf_satisfiable(self) -> bool:
@@ -1317,13 +1316,15 @@ class Var(NNF):
     Var(10)
     >>> Var(('a', 'b'), False)
     ~Var(('a', 'b'))
-
-    :ivar name: The name of the variable. Can be any hashable object.
-    :ivar true: Whether the variable is true. If ``False``, the variable is
-                negated.
     """
 
-    __slots__ = ('name', 'true')
+    __slots__ = {
+        "name": "The name of the variable. Can be any hashable object.",
+        "true": (
+            "Whether the variable is true. If ``False``, the variable is "
+            "negated."
+        ),
+    }
 
     if t.TYPE_CHECKING:
         def __init__(self, name: Name, true: bool = True) -> None:
@@ -1656,3 +1657,6 @@ class Builder:
     def Or(self, children: t.Iterable[T_NNF] = ()) -> 'nnf.Or[T_NNF]':
         ret = Or(children)
         return self.stored.setdefault(ret, ret)  # type: ignore
+
+
+from nnf import amc, dsharp, kissat, operators, tseitin  # noqa: E402
