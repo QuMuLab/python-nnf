@@ -5,7 +5,7 @@
 [`tox`](https://tox.readthedocs.io/en/latest/) is used to run the tests and linters. After installing it, run:
 
 ```
-tox -e py3
+tox
 ```
 
 This will install and run all the tooling.
