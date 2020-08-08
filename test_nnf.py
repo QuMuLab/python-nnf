@@ -639,13 +639,11 @@ def test_implicants(sentence: nnf.NNF):
 
 
 @given(NNF())
-def test_implicates_implicants_idempotent(sentence: nnf.NNF):
+def test_implicants_idempotent(sentence: nnf.NNF):
     assume(len(sentence.vars()) <= 6)
     implicants = sentence.implicants()
     implicates = sentence.implicates()
     assert implicants.implicants() == implicants
-    assert implicates.implicates() == implicates
-    assert implicants.implicates() == implicates
     assert implicates.implicants() == implicants
 
 
