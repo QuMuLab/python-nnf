@@ -126,7 +126,6 @@ def DNF(draw):
 @st.composite
 def CNF(draw):
     sentence = And(draw(st.frozensets(clauses())))
-    assume(len(sentence.children) > 0)
     return sentence
 
 
@@ -319,8 +318,7 @@ def test_arbitrary_dimacs_sat_serialize(sentence: nnf.NNF):
 
 
 @given(CNF())
-def test_arbitrary_dimacs_cnf_serialize(sentence: nnf.And):
-    assume(all(len(clause.children) > 0 for clause in sentence.children))
+def test_arbitrary_dimacs_cnf_serialize(sentence: And[Or[Var]]):
     reloaded = dimacs.loads(dimacs.dumps(sentence, mode='cnf'))
     assert reloaded.is_CNF()
     assert reloaded == sentence
@@ -328,12 +326,7 @@ def test_arbitrary_dimacs_cnf_serialize(sentence: nnf.And):
 
 @given(NNF())
 def test_dimacs_cnf_serialize_accepts_only_cnf(sentence: nnf.NNF):
-    if (isinstance(sentence, And)
-            and all(isinstance(clause, Or)
-                    and all(isinstance(var, Var)
-                            for var in clause.children)
-                    and len(clause.children) > 0
-                    for clause in sentence.children)):
+    if sentence.is_CNF():
         event("CNF sentence")
         dimacs.dumps(sentence, mode='cnf')
     else:
@@ -818,18 +811,17 @@ def test_copying_does_not_copy(sentence: nnf.NNF):
 
 if shutil.which('dsharp') is not None:
     def test_dsharp_compile_uf20():
-        for sentence in uf20_cnf:
-            compiled = dsharp.compile(sentence)
-            compiled_smooth = dsharp.compile(sentence, smooth=True)
-            assert sentence.equivalent(compiled)
-            assert sentence.equivalent(compiled_smooth)
-            assert compiled.decomposable()
-            assert compiled_smooth.decomposable()
-            assert compiled_smooth.smooth()
+        sentence = uf20_cnf[0]
+        compiled = dsharp.compile(sentence)
+        compiled_smooth = dsharp.compile(sentence, smooth=True)
+        assert sentence.equivalent(compiled)
+        assert sentence.equivalent(compiled_smooth)
+        assert compiled.decomposable()
+        assert compiled_smooth.decomposable()
+        assert compiled_smooth.smooth()
 
     @given(CNF())
     def test_dsharp_compile(sentence: And[Or[Var]]):
-        assume(all(len(clause) > 0 for clause in sentence))
         compiled = dsharp.compile(sentence)
         compiled_smooth = dsharp.compile(sentence, smooth=True)
         assert compiled.decomposable()
@@ -841,7 +833,6 @@ if shutil.which('dsharp') is not None:
 
     @given(CNF())
     def test_dsharp_compile_converting_names(sentence: And[Or[Var]]):
-        assume(all(len(clause) > 0 for clause in sentence))
         sentence = And(Or(Var(str(var.name), var.true) for var in clause)
                        for clause in sentence)
         compiled = dsharp.compile(sentence)
@@ -924,7 +915,6 @@ if (platform.uname().system, platform.uname().machine) == ('Linux', 'x86_64'):
 
     @given(CNF())
     def test_kissat_cnf(sentence: And[Or[Var]]):
-        assume(all(len(clause) > 0 for clause in sentence))
         with using_kissat():
             assert sentence.satisfiable() == sentence._cnf_satisfiable_native()
 

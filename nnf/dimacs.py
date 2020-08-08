@@ -145,8 +145,6 @@ def _dump_cnf(
         if not isinstance(clause, Or):
             raise TypeError("CNF sentences must be conjunctions of "
                             "disjunctions")
-        if not len(clause.children) > 0:
-            raise TypeError("CNF sentences shouldn't have empty clauses")
         first = True
         for child in clause.children:
             if not isinstance(child, Var):
@@ -294,8 +292,7 @@ def _parse_cnf(tokens: t.Iterable[str]) -> And[Or[Var]]:
     clause = set()  # type: t.Set[Var]
     for token in tokens:
         if token == '0':
-            if clause:
-                clauses.add(Or(clause))
+            clauses.add(Or(clause))
             clause = set()
         elif token == '%':
             # Some example files end with:
@@ -303,7 +300,7 @@ def _parse_cnf(tokens: t.Iterable[str]) -> And[Or[Var]]:
             # %
             # 0
             # I don't know why.
-            pass
+            break
         elif token.startswith('-'):
             clause.add(Var(int(token[1:]), False))
         else:

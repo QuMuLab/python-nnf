@@ -25,7 +25,7 @@ import subprocess
 import tempfile
 import typing as t
 
-from nnf import NNF, And, Or, Var, false, dimacs
+from nnf import NNF, And, Or, Var, false, true, dimacs
 from nnf.util import Name
 
 __all__ = ('load', 'loads', 'compile')
@@ -99,6 +99,12 @@ def compile(
 
     if not sentence.is_CNF():
         raise ValueError("Sentence must be in CNF")
+
+    # Handle cases D# doesn't like
+    if not sentence.children:
+        return true
+    if false in sentence.children:
+        return false
 
     var_labels = dict(enumerate(sentence.vars(), start=1))
     var_labels_inverse = {v: k for k, v in var_labels.items()}
