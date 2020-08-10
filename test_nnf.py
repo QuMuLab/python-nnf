@@ -3,6 +3,7 @@ import pickle
 import platform
 import shutil
 import os
+import types
 
 from pathlib import Path
 
@@ -15,6 +16,15 @@ import nnf
 
 from nnf import (Var, And, Or, amc, dimacs, dsharp, operators,
                  tseitin, complete_models, using_kissat)
+
+memoized = [
+    method
+    for method in vars(nnf.NNF).values()
+    if isinstance(method, types.FunctionType) and hasattr(method, "memo")
+]
+assert memoized, "No memoized methods found, did the implementation change?"
+for method in memoized:
+    method.set = lambda *args: None  # type: ignore
 
 settings.register_profile('patient', deadline=2000,
                           suppress_health_check=(HealthCheck.too_slow,))
@@ -116,7 +126,6 @@ def DNF(draw):
 @st.composite
 def CNF(draw):
     sentence = And(draw(st.frozensets(clauses())))
-    assume(len(sentence.children) > 0)
     return sentence
 
 
@@ -309,19 +318,15 @@ def test_arbitrary_dimacs_sat_serialize(sentence: nnf.NNF):
 
 
 @given(CNF())
-def test_arbitrary_dimacs_cnf_serialize(sentence: nnf.And):
-    assume(all(len(clause.children) > 0 for clause in sentence.children))
-    assert dimacs.loads(dimacs.dumps(sentence, mode='cnf')) == sentence
+def test_arbitrary_dimacs_cnf_serialize(sentence: And[Or[Var]]):
+    reloaded = dimacs.loads(dimacs.dumps(sentence, mode='cnf'))
+    assert reloaded.is_CNF()
+    assert reloaded == sentence
 
 
 @given(NNF())
 def test_dimacs_cnf_serialize_accepts_only_cnf(sentence: nnf.NNF):
-    if (isinstance(sentence, And)
-            and all(isinstance(clause, Or)
-                    and all(isinstance(var, Var)
-                            for var in clause.children)
-                    and len(clause.children) > 0
-                    for clause in sentence.children)):
+    if sentence.is_CNF():
         event("CNF sentence")
         dimacs.dumps(sentence, mode='cnf')
     else:
@@ -483,14 +488,10 @@ def test_uf20_models():
 
     for sentence in uf20:
         assert sentence.decomposable()
-        m = list(sentence.models(deterministic=False,
-                                 decomposable=True))
+        m = list(sentence.models(deterministic=False))
         models = model_set(m)
         assert len(m) == len(models)
-        assert models == model_set(sentence.models(deterministic=True,
-                                                   decomposable=False))
-        assert models == model_set(sentence.models(deterministic=True,
-                                                   decomposable=True))
+        assert models == model_set(sentence.models(deterministic=True))
 
 
 @given(NNF())
@@ -530,8 +531,9 @@ def test_model_counting(sentence: nnf.NNF):
 
 def test_uf20_model_counting():
     for sentence in uf20:
-        assert (sentence.model_count(deterministic=True)
-                == len(list(sentence.models())))
+        assert sentence.model_count() == len(list(sentence.models()))
+        sentence.mark_deterministic()
+        assert sentence.model_count() == len(list(sentence.models()))
 
 
 @given(NNF())
@@ -548,19 +550,45 @@ def test_validity(sentence: nnf.NNF):
 
 def test_uf20_validity():
     for sentence in uf20:
-        assert not sentence.valid(deterministic=True)
+        assert not sentence.valid()
+        sentence.mark_deterministic()
+        assert not sentence.valid()
 
 
 @given(CNF())
 def test_is_CNF(sentence: nnf.NNF):
     assert sentence.is_CNF()
+    assert sentence.is_CNF(strict=True)
     assert not sentence.is_DNF()
+
+
+def test_is_CNF_examples():
+    assert And().is_CNF()
+    assert And().is_CNF(strict=True)
+    assert And({Or()}).is_CNF()
+    assert And({Or()}).is_CNF(strict=True)
+    assert And({Or({a, ~b})}).is_CNF()
+    assert And({Or({a, ~b})}).is_CNF(strict=True)
+    assert And({Or({a, ~b}), Or({c, ~c})}).is_CNF()
+    assert not And({Or({a, ~b}), Or({c, ~c})}).is_CNF(strict=True)
 
 
 @given(DNF())
 def test_is_DNF(sentence: nnf.NNF):
     assert sentence.is_DNF()
+    assert sentence.is_DNF(strict=True)
     assert not sentence.is_CNF()
+
+
+def test_is_DNF_examples():
+    assert Or().is_DNF()
+    assert Or().is_DNF(strict=True)
+    assert Or({And()}).is_DNF()
+    assert Or({And()}).is_DNF(strict=True)
+    assert Or({And({a, ~b})}).is_DNF()
+    assert Or({And({a, ~b})}).is_DNF(strict=True)
+    assert Or({And({a, ~b}), And({c, ~c})}).is_DNF()
+    assert not Or({And({a, ~b}), And({c, ~c})}).is_DNF(strict=True)
 
 
 @given(NNF())
@@ -568,6 +596,9 @@ def test_to_MODS(sentence: nnf.NNF):
     assume(len(sentence.vars()) <= 5)
     mods = sentence.to_MODS()
     assert mods.is_MODS()
+    assert mods.is_DNF()
+    assert mods.is_DNF(strict=True)
+    assert mods.smooth()
     assert isinstance(mods, Or)
     assert mods.model_count() == len(mods.children)
 
@@ -591,7 +622,7 @@ def test_pairwise(sentence: nnf.NNF):
 def test_implicates(sentence: nnf.NNF):
     implicates = sentence.implicates()
     assert implicates.equivalent(sentence)
-    assert implicates.is_CNF()
+    assert implicates.is_CNF(strict=True)
     assert not any(a.children < b.children
                    for a in implicates.children
                    for b in implicates.children)
@@ -608,13 +639,11 @@ def test_implicants(sentence: nnf.NNF):
 
 
 @given(NNF())
-def test_implicates_implicants_idempotent(sentence: nnf.NNF):
+def test_implicants_idempotent(sentence: nnf.NNF):
     assume(len(sentence.vars()) <= 6)
     implicants = sentence.implicants()
     implicates = sentence.implicates()
     assert implicants.implicants() == implicants
-    assert implicates.implicates() == implicates
-    assert implicants.implicates() == implicates
     assert implicates.implicants() == implicants
 
 
@@ -628,6 +657,7 @@ def test_implicates_implicants_negation_rule(sentence: nnf.NNF):
     So sentence.negate().implicants().negate() gives all implicates,
     and sentence.negate().implicates().negate() gives some implicants.
     """
+    assume(sentence.size() <= 30)
     assert (
         sentence.negate().implicants().negate().children
         >= sentence.implicates().children
@@ -666,9 +696,9 @@ def test_implies(a: nnf.NNF, b: nnf.NNF):
 @given(CNF())
 def test_cnf_sat(sentence: nnf.NNF):
     assert sentence.is_CNF()
-    assert sentence.satisfiable(cnf=True) == sentence.satisfiable(cnf=False)
-    assert (model_set(sentence.models(cnf=True)) ==
-            model_set(sentence.models(cnf=False, deterministic=True)))
+    models_ = list(sentence.models())
+    assert model_set(models_) == model_set(sentence._models_deterministic())
+    assert sentence.satisfiable() == bool(models_)
 
 
 def test_uf20_cnf_sat():
@@ -679,7 +709,7 @@ def test_uf20_cnf_sat():
         # But even 20 variables is too much
         # So let's just hope that test_cnf_sat does enough
         at_least_one = False
-        for model in sentence.models(cnf=True):
+        for model in sentence.models():
             assert sentence.satisfied_by(model)
             at_least_one = True
         assert at_least_one
@@ -779,18 +809,17 @@ def test_copying_does_not_copy(sentence: nnf.NNF):
 
 if shutil.which('dsharp') is not None:
     def test_dsharp_compile_uf20():
-        for sentence in uf20_cnf:
-            compiled = dsharp.compile(sentence)
-            compiled_smooth = dsharp.compile(sentence, smooth=True)
-            assert sentence.equivalent(compiled)
-            assert sentence.equivalent(compiled_smooth)
-            assert compiled.decomposable()
-            assert compiled_smooth.decomposable()
-            assert compiled_smooth.smooth()
+        sentence = uf20_cnf[0]
+        compiled = dsharp.compile(sentence)
+        compiled_smooth = dsharp.compile(sentence, smooth=True)
+        assert sentence.equivalent(compiled)
+        assert sentence.equivalent(compiled_smooth)
+        assert compiled.decomposable()
+        assert compiled_smooth.decomposable()
+        assert compiled_smooth.smooth()
 
     @given(CNF())
     def test_dsharp_compile(sentence: And[Or[Var]]):
-        assume(all(len(clause) > 0 for clause in sentence))
         compiled = dsharp.compile(sentence)
         compiled_smooth = dsharp.compile(sentence, smooth=True)
         assert compiled.decomposable()
@@ -802,13 +831,34 @@ if shutil.which('dsharp') is not None:
 
     @given(CNF())
     def test_dsharp_compile_converting_names(sentence: And[Or[Var]]):
-        assume(all(len(clause) > 0 for clause in sentence))
         sentence = And(Or(Var(str(var.name), var.true) for var in clause)
                        for clause in sentence)
         compiled = dsharp.compile(sentence)
         assert all(isinstance(name, str) for name in compiled.vars())
         if sentence.satisfiable():
             assert sentence.equivalent(compiled)
+
+
+def test_mark_deterministic():
+    s = And()
+    t = And()
+
+    assert not s.marked_deterministic()
+    assert not t.marked_deterministic()
+
+    s.mark_deterministic()
+
+    assert s.marked_deterministic()
+    assert not t.marked_deterministic()
+
+    t.mark_deterministic()
+
+    assert s.marked_deterministic()
+    assert t.marked_deterministic()
+
+    del s
+
+    assert t.marked_deterministic()
 
 
 @given(NNF())
@@ -819,6 +869,7 @@ def test_tseitin(sentence: nnf.NNF):
 
     T = tseitin.to_CNF(sentence)
     assert T.is_CNF()
+    assert T.is_CNF(strict=True)
     assert T.forget_aux().equivalent(sentence)
 
     models = list(complete_models(T.models(), sentence.vars() | T.vars()))
@@ -827,6 +878,7 @@ def test_tseitin(sentence: nnf.NNF):
         assert sentence.satisfied_by(mt)
 
     assert len(models) == sentence.model_count()
+
 
 @given(models())
 def test_complete_models(model: nnf.And[nnf.Var]):
@@ -844,10 +896,13 @@ def test_complete_models(model: nnf.And[nnf.Var]):
     assert all(x.keys() == m.keys() | {"test1", "test2"} for x in two)
 
     if m:
-        multi = list(complete_models([m, neg], model.vars() | {"test1", "test2"}))
+        multi = list(
+            complete_models([m, neg], model.vars() | {"test1", "test2"})
+        )
         assert len(multi) == 8
         assert len({frozenset(x.items()) for x in multi}) == 8  # all unique
         assert all(x.keys() == m.keys() | {"test1", "test2"} for x in multi)
+
 
 if (platform.uname().system, platform.uname().machine) == ('Linux', 'x86_64'):
 
@@ -858,11 +913,13 @@ if (platform.uname().system, platform.uname().machine) == ('Linux', 'x86_64'):
 
     @given(CNF())
     def test_kissat_cnf(sentence: And[Or[Var]]):
-        assume(all(len(clause) > 0 for clause in sentence))
         with using_kissat():
             assert sentence.satisfiable() == sentence._cnf_satisfiable_native()
 
     @given(NNF())
     def test_kissat_nnf(sentence: And[Or[Var]]):
         with using_kissat():
-            assert sentence.satisfiable() == tseitin.to_CNF(sentence)._cnf_satisfiable_native()
+            assert (
+                sentence.satisfiable()
+                == tseitin.to_CNF(sentence)._cnf_satisfiable_native()
+            )

@@ -4,11 +4,10 @@ import collections
 import functools
 import itertools
 
-import nnf
+from nnf import amc, And, Or, Var, true, false
 
-from nnf import amc, And, Or, Var
-
-memoize = functools.lru_cache(None)  # huge speedup
+# Cache generated nodes
+memoize = functools.lru_cache(None)
 
 
 def powerset(iterable):
@@ -21,8 +20,6 @@ def powerset(iterable):
 
 def lin(candidates):
     # candidates must be hashable, have total ordering
-    builder = nnf.Builder()
-
     candidates = frozenset(candidates)
     n = len(candidates)
     T = frozenset(powerset(candidates))
@@ -32,17 +29,16 @@ def lin(candidates):
     def defeats(i, j):
         assert i != j
         if i < j:
-            return builder.Var((i, j))
+            return Var((i, j))
         else:
-            return builder.Var((j, i), False)
+            return Var((j, i), False)
 
     @memoize
     def C(S):
         if S == candidates:
-            return builder.true
+            return true
 
-        return builder.Or(C_child(i, S)
-                          for i in candidates - S)
+        return Or(C_child(i, S) for i in candidates - S)
 
     @memoize
     def C_child(i, S):
@@ -50,7 +46,7 @@ def lin(candidates):
         children.update(defeats(i, j)
                         for j in candidates - S
                         if i != j)
-        return builder.And(children)
+        return And(children)
 
     return C(frozenset())
 
@@ -81,8 +77,8 @@ def order_to_model(order):
 def kemeny(votes):
     labels = collections.Counter()
     for vote in votes:
-        for name, true in order_to_model(vote).items():
-            labels[nnf.Var(name, true)] += 1
+        for name, truthiness in order_to_model(vote).items():
+            labels[Var(name, truthiness)] += 1
     return {model_to_order(model)
             for model in amc.maxplus_reduce(lin(votes[0]), labels).models()}
 
@@ -90,8 +86,8 @@ def kemeny(votes):
 def slater(votes):
     totals = collections.Counter()
     for vote in votes:
-        for name, true in order_to_model(vote).items():
-            totals[nnf.Var(name, true)] += 1
+        for name, truthiness in order_to_model(vote).items():
+            totals[Var(name, truthiness)] += 1
     labels = {}
     for var in totals:
         labels[var] = 1 if totals[var] > totals[~var] else 0
@@ -143,7 +139,7 @@ def test():
     s_3 = s.condition({(0, 1): True, (1, 2): True, (0, 2): False})
     assert len(list(s_3.models())) == 0
     assert not s_3.satisfiable()
-    assert s_3.simplify() == nnf.false
+    assert s_3.simplify() == false
 
     # strings as candidates
     named = lin({"Alice", "Bob", "Carol"})

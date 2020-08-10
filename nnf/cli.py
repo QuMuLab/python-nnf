@@ -20,6 +20,8 @@ from nnf import NNF, dimacs
 #       model enumeration
 #       ...
 
+DOT_FORMATS = {'ps', 'pdf', 'svg', 'fig', 'png', 'gif', 'jpg', 'jpeg'}
+
 
 @contextlib.contextmanager
 def timer(args: argparse.Namespace) -> t.Iterator[SimpleNamespace]:
@@ -152,10 +154,9 @@ def sentence_stats(verbose: bool, sentence: NNF) -> SimpleNamespace:
 def sat(args: argparse.Namespace) -> int:
     with open_read(args.file) as f:
         sentence = dimacs.load(f)
-    stats = sentence_stats(args.verbose, sentence)
+    sentence_stats(args.verbose, sentence)
     with timer(args):
-        sat = sentence.satisfiable(decomposable=stats.decomposable,
-                                   cnf=stats.cnf)
+        sat = sentence.satisfiable()
     if sat:
         if not args.quiet:
             print("SATISFIABLE")
@@ -169,11 +170,11 @@ def sat(args: argparse.Namespace) -> int:
 def sharpsat(args: argparse.Namespace) -> int:
     with open_read(args.file) as f:
         sentence = dimacs.load(f)
-    stats = sentence_stats(args.verbose, sentence)
+    if args.deterministic:
+        sentence.mark_deterministic()
+    sentence_stats(args.verbose, sentence)
     with timer(args):
-        num = sentence.model_count(decomposable=stats.decomposable,
-                                   deterministic=args.deterministic,
-                                   smooth=stats.smooth)
+        num = sentence.model_count()
     if args.quiet:
         print(num)
     else:
@@ -190,9 +191,6 @@ def info(args: argparse.Namespace) -> int:
     return 0
 
 
-dot_formats = {'ps', 'pdf', 'svg', 'fig', 'png', 'gif', 'jpg', 'jpeg'}
-
-
 def extension(fname: str) -> t.Optional[str]:
     if '.' not in fname:
         return None
@@ -206,7 +204,7 @@ def draw(args: argparse.Namespace) -> int:
     dot = sentence.to_DOT(color=args.color, label=label)
 
     ext = extension(args.out)
-    if ext in dot_formats or args.format is not None:
+    if ext in DOT_FORMATS or args.format is not None:
         argv = ['dot', '-T' + (ext if args.format is None  # type: ignore
                                else args.format)]
         if args.out != '-':

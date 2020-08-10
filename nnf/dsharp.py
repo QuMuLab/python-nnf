@@ -25,7 +25,8 @@ import subprocess
 import tempfile
 import typing as t
 
-from nnf import NNF, And, Or, Var, false, dimacs, Name
+from nnf import NNF, And, Or, Var, false, true, dimacs
+from nnf.util import Name
 
 __all__ = ('load', 'loads', 'compile')
 
@@ -80,6 +81,8 @@ def compile(
 
     This requires having DSHARP installed.
 
+    The returned sentence will be marked as deterministic.
+
     :param sentence: The CNF sentence to compile.
     :param executable: The path of the ``dsharp`` executable. If the
                        executable is in your PATH there's no need to set this.
@@ -96,6 +99,12 @@ def compile(
 
     if not sentence.is_CNF():
         raise ValueError("Sentence must be in CNF")
+
+    # Handle cases D# doesn't like
+    if not sentence.children:
+        return true
+    if false in sentence.children:
+        return false
 
     var_labels = dict(enumerate(sentence.vars(), start=1))
     var_labels_inverse = {v: k for k, v in var_labels.items()}
@@ -139,4 +148,7 @@ def compile(
     if not out:
         raise RuntimeError("Couldn't read file output. Log:\n\n{}".format(log))
 
-    return loads(out, var_labels=var_labels)
+    result = loads(out, var_labels=var_labels)
+    result.mark_deterministic()
+    NNF.decomposable.set(result, True)
+    return result

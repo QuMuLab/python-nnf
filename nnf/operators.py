@@ -7,7 +7,8 @@ inefficient.
 
 import typing as t
 
-from nnf import NNF, And, Or, T_NNF, U_NNF
+from nnf import NNF, And, Or
+from nnf.util import T_NNF, U_NNF
 
 __all__ = ('xor', 'nand', 'nor', 'implies', 'implied_by', 'iff', 'and_', 'or_')
 

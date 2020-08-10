@@ -6,7 +6,8 @@ polynomial time/space. It does so at the cost of introducing new variables
 (one for each logical connective in the formula).
 """
 
-from nnf import NNF, Var, And, Or, memoize, Internal
+from nnf import NNF, Var, And, Or, Internal
+from nnf.util import memoize
 
 
 def to_CNF(theory: NNF) -> And[Or[Var]]:
@@ -51,4 +52,7 @@ def to_CNF(theory: NNF) -> And[Or[Var]]:
 
     root = process_node(theory)
     clauses.append(Or({root}))
-    return And(clauses)
+    ret = And(clauses)
+    NNF._is_CNF_loose.set(ret, True)
+    NNF._is_CNF_strict.set(ret, True)
+    return ret

@@ -6,7 +6,8 @@ import io
 import typing as t
 import warnings
 
-from nnf import NNF, Var, And, Or, Name, true, false
+from nnf import NNF, Var, And, Or, true, false
+from nnf.util import Name
 
 __all__ = ('dump', 'load', 'dumps', 'loads')
 
@@ -144,8 +145,6 @@ def _dump_cnf(
         if not isinstance(clause, Or):
             raise TypeError("CNF sentences must be conjunctions of "
                             "disjunctions")
-        if not len(clause.children) > 0:
-            raise TypeError("CNF sentences shouldn't have empty clauses")
         first = True
         for child in clause.children:
             if not isinstance(child, Var):
@@ -293,8 +292,7 @@ def _parse_cnf(tokens: t.Iterable[str]) -> And[Or[Var]]:
     clause = set()  # type: t.Set[Var]
     for token in tokens:
         if token == '0':
-            if clause:
-                clauses.add(Or(clause))
+            clauses.add(Or(clause))
             clause = set()
         elif token == '%':
             # Some example files end with:
@@ -302,7 +300,7 @@ def _parse_cnf(tokens: t.Iterable[str]) -> And[Or[Var]]:
             # %
             # 0
             # I don't know why.
-            pass
+            break
         elif token.startswith('-'):
             clause.add(Var(int(token[1:]), False))
         else:
@@ -311,4 +309,6 @@ def _parse_cnf(tokens: t.Iterable[str]) -> And[Or[Var]]:
         # A file may or may not end with a 0
         # Adding an empty clause is not desirable
         clauses.add(Or(clause))
-    return And(clauses)
+    sentence = And(clauses)
+    NNF._is_CNF_loose.set(sentence, True)
+    return sentence
