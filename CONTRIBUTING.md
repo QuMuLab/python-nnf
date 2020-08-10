@@ -71,7 +71,7 @@ Unlike the other decorator, this one uses `weakref`, so it doesn't interfere wit
 
 Methods are documented with reStructuredText inside docstrings. This looks a little like markdown, but it's different, so take care and look at other docstrings for examples.
 
-Documentation is automatically generated and ends up at [Read the Docs](https://hypothesis.readthedocs.io/en/latest/).
+Documentation is automatically generated and ends up at [Read the Docs](https://python-nnf.readthedocs.io/en/latest/).
 
 To build the documentation locally, run `make html` inside the `docs/` directory. This generates a manual in `docs/_build/html/`.
 
