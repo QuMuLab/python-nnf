@@ -19,6 +19,8 @@ import functools
 import itertools
 import operator
 import os
+import shutil
+import subprocess
 import threading
 import typing as t
 import uuid
@@ -1076,6 +1078,24 @@ class NNF(metaclass=abc.ABCMeta):
             ] +
             ['}\n']
         )
+
+    if shutil.which("dot"):
+
+        def _repr_svg_(self) -> str:
+            """Pretty rendering in Jupyter notebooks using graphviz.
+
+            Inspired by the `graphviz<https://pypi.org/p/graphviz>`_ Python
+            package, which implements _repr_svg_ the same way.
+            """
+            src = self.to_DOT()
+            proc = subprocess.Popen(
+                ["dot", "-Tsvg"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                universal_newlines=True,
+            )
+            out, _ = proc.communicate(src)
+            return out
 
     def _models_deterministic(self) -> t.Iterator[Model]:
         """Model enumeration for deterministic sentences.
