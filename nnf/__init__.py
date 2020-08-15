@@ -45,10 +45,27 @@ if t.TYPE_CHECKING:
     import nnf
 
 
-__all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Aux', 'Builder',
-           'all_models', 'complete_models', 'decision', 'true', 'false',
-           'dsharp', 'dimacs', 'amc', 'kissat', 'config', 'tseitin',
-           'operators')
+__all__ = (
+    "NNF",
+    "Internal",
+    "And",
+    "Or",
+    "Var",
+    "Aux",
+    "Builder",
+    "all_models",
+    "complete_models",
+    "decision",
+    "true",
+    "false",
+    "dsharp",
+    "dimacs",
+    "amc",
+    "kissat",
+    "config",
+    "tseitin",
+    "operators",
+)
 
 
 def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
