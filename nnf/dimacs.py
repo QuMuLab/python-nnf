@@ -223,7 +223,6 @@ def load(fp: t.TextIO) -> t.Union[NNF, And[Or[Var]]]:
             fp.seek(0)
             return dsharp.load(fp)
         else:
-            print(repr(line))
             raise DecodeError(
                 "Couldn't find a problem line before an unknown kind of line"
             )
