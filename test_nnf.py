@@ -328,7 +328,7 @@ def test_dimacs_cnf_serialize_accepts_only_cnf(sentence: nnf.NNF):
         dimacs.dumps(sentence, mode='cnf')
     else:
         event("Not CNF sentence")
-        with pytest.raises(TypeError):
+        with pytest.raises(dimacs.EncodeError):
             dimacs.dumps(sentence, mode='cnf')
 
 
