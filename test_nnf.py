@@ -304,6 +304,11 @@ p cnf 4 3
     })
 
 
+def test_dimacs_rejects_weird_digits():
+    with pytest.raises(dimacs.DecodeError):
+        dimacs.loads("p cnf 1 1\n¹ 0")
+
+
 @given(NNF())
 def test_arbitrary_dimacs_sat_serialize(sentence: nnf.NNF):
     assert dimacs.loads(dimacs.dumps(sentence)) == sentence

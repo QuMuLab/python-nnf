@@ -291,10 +291,8 @@ def _parse_sat(tokens: 't.Deque[str]') -> NNF:
             return Or(children)
         else:
             return false
-    elif cur.isdigit():
-        return Var(int(cur))
     else:
-        raise DecodeError("Found unexpected token {!r}".format(cur))
+        return Var(_parse_int(cur))
 
 
 def _load_cnf(fp: t.TextIO) -> And[Or[Var]]:
@@ -324,9 +322,9 @@ def _parse_cnf(tokens: t.Iterable[str]) -> And[Or[Var]]:
             # I don't know why.
             break
         elif token.startswith('-'):
-            clause.add(Var(int(token[1:]), False))
+            clause.add(Var(_parse_int(token[1:]), False))
         else:
-            clause.add(Var(int(token)))
+            clause.add(Var(_parse_int(token)))
     if clause:
         # A file may or may not end with a 0
         # Adding an empty clause is not desirable
@@ -334,3 +332,17 @@ def _parse_cnf(tokens: t.Iterable[str]) -> And[Or[Var]]:
     sentence = And(clauses)
     NNF._is_CNF_loose.set(sentence, True)
     return sentence
+
+
+def _parse_int(token: str) -> int:
+    """Parse an integer, or raise an appropriate exception.
+
+    Arguably a little too accepting, e.g. _parse_int("३") == 3
+    (that's U+0969 DEVANAGARI DIGIT THREE)
+    """
+    try:
+        return int(token)
+    except ValueError:
+        raise DecodeError(
+            "Found unexpected token {!r}".format(token)
+        ) from None
