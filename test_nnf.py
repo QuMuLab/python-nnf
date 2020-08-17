@@ -5,6 +5,7 @@ import platform
 import shutil
 import threading
 import types
+import typing as t
 
 import pytest
 
@@ -14,7 +15,7 @@ from hypothesis import (assume, event, given, strategies as st, settings,
 import nnf
 
 from nnf import (Var, And, Or, amc, dimacs, dsharp, operators,
-                 tseitin, complete_models, config)
+                 tseitin, complete_models, config, pysat, all_models)
 
 memoized = [
     method
@@ -38,7 +39,7 @@ satlib = pathlib.Path(__file__).parent / "testdata" / "satlib"
 uf20 = [dsharp.load(file.open()) for file in (satlib / "uf20").glob("*.nnf")]
 uf20_cnf = [
     dimacs.load(file.open()) for file in (satlib / "uf20").glob("*.cnf")
-]
+]  # type: t.List[And[Or[Var]]]
 
 # Test config default value before the tests start mucking with the state
 assert config.sat_backend == "auto"
@@ -370,11 +371,15 @@ def test_to_model(model: dict):
     assert sentence.to_model() == model
 
 
-@given(NNF())
-def test_models_smart_equivalence(sentence: nnf.NNF):
-    dumb = list(sentence.models())
-    smart = list(sentence._models_deterministic())
-    assert model_set(dumb) == model_set(smart)
+@given(DNNF())
+def test_models_deterministic_sanity(sentence: nnf.NNF):
+    """Running _models_deterministic() on a non-deterministic decomposable
+    sentence may return duplicate models but should not return unsatisfying
+    models and should return each satisfying model at least once.
+    """
+    assert model_set(sentence._models_decomposable()) == model_set(
+        sentence._models_deterministic()
+    )
 
 
 @pytest.mark.parametrize(
@@ -478,22 +483,10 @@ def test_uf20_models():
 
     for sentence in uf20:
         assert sentence.decomposable()
-        m = list(sentence.models(deterministic=False))
+        m = list(sentence._models_decomposable())
         models = model_set(m)
         assert len(m) == len(models)
-        assert models == model_set(sentence.models(deterministic=True))
-
-
-@given(NNF())
-def test_deterministic_models_always_works(sentence: nnf.NNF):
-    if sentence.deterministic():
-        event("Sentence is deterministic")
-    else:
-        event("Sentence is not deterministic")
-    with_det = list(sentence.models(deterministic=True))
-    no_det = list(sentence.models(deterministic=False))
-    assert len(with_det) == len(no_det)
-    assert model_set(with_det) == model_set(no_det)
+        assert models == model_set(sentence._models_deterministic())
 
 
 def test_instantiating_base_classes_fails():
@@ -521,6 +514,7 @@ def test_model_counting(sentence: nnf.NNF):
 
 def test_uf20_model_counting():
     for sentence in uf20:
+        nnf.NNF._deterministic_sentences.pop(id(sentence), None)
         assert sentence.model_count() == len(list(sentence.models()))
         sentence.mark_deterministic()
         assert sentence.model_count() == len(list(sentence.models()))
@@ -540,6 +534,7 @@ def test_validity(sentence: nnf.NNF):
 
 def test_uf20_validity():
     for sentence in uf20:
+        nnf.NNF._deterministic_sentences.pop(id(sentence), None)
         assert not sentence.valid()
         sentence.mark_deterministic()
         assert not sentence.valid()
@@ -681,14 +676,6 @@ def test_implies(a: nnf.NNF, b: nnf.NNF):
         event("No implication")
         assert any(not b.condition(model).valid()
                    for model in a.models())
-
-
-@given(CNF())
-def test_cnf_sat(sentence: nnf.NNF):
-    assert sentence.is_CNF()
-    models_ = list(sentence.models())
-    assert model_set(models_) == model_set(sentence._models_deterministic())
-    assert sentence.satisfiable() == bool(models_)
 
 
 def test_uf20_cnf_sat():
@@ -995,3 +982,100 @@ def test_config_multithreading():
     thread.join()
 
     assert config.sat_backend == "native"
+
+
+@given(NNF())
+def test_solve(sentence: nnf.NNF):
+    solution = sentence.solve()
+    if solution is None:
+        assert not sentence.satisfiable()
+    else:
+        assert sentence.satisfiable()
+        assert sentence.satisfied_by(solution)
+
+
+@pytest.fixture(
+    scope="module",
+    params=[
+        "cadical",
+        "glucose30",
+        "glucose41",
+        "lingeling",
+        "maplechrono",
+        "maplecm",
+        "maplesat",
+        "minicard",
+        "minisat22",
+        "minisat-gh",
+    ],
+)
+def pysat_solver(request):
+    return config(pysat_solver=request.param)
+
+
+if pysat.available:
+
+    @given(sentence=CNF())
+    def test_pysat_satisfiable(sentence: And[Or[Var]], pysat_solver):
+        with pysat_solver:
+            assert sentence._cnf_satisfiable_native() == pysat.satisfiable(
+                sentence
+            )
+
+    @given(sentence=CNF())
+    def test_pysat_models(sentence: And[Or[Var]], pysat_solver):
+        native_models = list(sentence._cnf_models_native())
+        with pysat_solver:
+            pysat_models = list(pysat.models(sentence))
+        native_set = model_set(native_models)
+        pysat_set = model_set(pysat_models)
+        assert native_set == pysat_set
+        assert (
+            len(native_models)
+            == len(pysat_models)
+            == len(native_set)
+            == len(pysat_set)
+        )
+
+    @given(sentence=CNF())
+    def test_pysat_solve(sentence: And[Or[Var]], pysat_solver):
+        with pysat_solver:
+            native_solution = sentence._cnf_solve()
+            pysat_solution = pysat.solve(sentence)
+            if native_solution is None:
+                assert pysat_solution is None
+                assert not sentence._cnf_satisfiable_native()
+                assert not pysat.satisfiable(sentence)
+            else:
+                assert pysat_solution is not None
+                assert sentence.satisfied_by(native_solution)
+                assert sentence.satisfied_by(pysat_solution)
+                assert sentence._cnf_satisfiable_native()
+                assert pysat.satisfiable(sentence)
+
+    def test_pysat_uf20(pysat_solver):
+        with pysat_solver:
+            for sentence in uf20_cnf:
+                assert pysat.satisfiable(sentence)
+                solution = pysat.solve(sentence)
+                assert solution
+                assert sentence.satisfied_by(solution)
+
+
+@given(NNF())
+def test_satisfiable(sentence: nnf.NNF):
+    assert sentence.satisfiable() == any(
+        sentence.satisfied_by(model) for model in all_models(sentence.vars())
+    )
+
+
+@given(NNF())
+def test_models(sentence: nnf.NNF):
+    real_models = [
+        model
+        for model in all_models(sentence.vars())
+        if sentence.satisfied_by(model)
+    ]
+    models = list(sentence.models())
+    assert len(real_models) == len(models)
+    assert model_set(real_models) == model_set(models)

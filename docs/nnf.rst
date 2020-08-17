@@ -59,3 +59,11 @@ nnf.kissat module
    :members:
    :undoc-members:
    :show-inheritance:
+
+nnf.pysat module
+-----------------
+
+.. automodule:: nnf.pysat
+   :members:
+   :undoc-members:
+   :show-inheritance:

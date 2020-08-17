@@ -1,6 +1,7 @@
 """Utility definitions for internal use. Not part of the public API."""
 
 import functools
+import itertools
 import typing as t
 import weakref
 
@@ -15,7 +16,6 @@ U = t.TypeVar("U")
 T_NNF = t.TypeVar("T_NNF", bound="NNF")
 U_NNF = t.TypeVar("U_NNF", bound="NNF")
 T_NNF_co = t.TypeVar("T_NNF_co", bound="NNF", covariant=True)
-_Tristate = t.Optional[bool]
 
 # Bottom type with no values
 # This works in mypy but not pytype
@@ -108,3 +108,30 @@ class _WeakrefMemoized(t.Generic[T_NNF, T]):
 
     def set(self, sentence: T_NNF, value: T) -> None:
         ...
+
+
+class ReusableLazyIterable(t.Generic[T]):
+    """Use an iterator multiple times, without consuming it straight away.
+
+    Related to itertools.tee, but more convenient and less memory-efficient.
+    Not thread-safe.
+
+    We use this so we can have return values that are both lazy and memoized.
+    Computed at most once, but not immediately.
+    """
+    def __init__(self, iterator: t.Iterator[T]) -> None:
+        self.iterator = iterator
+        self.memory = []  # type: t.List[T]
+
+    def __iter__(self) -> t.Iterator[T]:
+        # I'm starting to see the charm of Haskell
+        for ind in itertools.count():
+            if ind >= len(self.memory):
+                try:
+                    new = next(self.iterator)
+                except StopIteration:
+                    return
+                self.memory.append(new)
+                yield new
+            else:
+                yield self.memory[ind]
