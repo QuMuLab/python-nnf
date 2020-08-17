@@ -41,9 +41,6 @@ from nnf.util import (
     ReusableLazyIterable,
 )
 
-if t.TYPE_CHECKING:
-    import nnf
-
 
 __all__ = (
     "NNF",
@@ -52,7 +49,6 @@ __all__ = (
     "Or",
     "Var",
     "Aux",
-    "Builder",
     "all_models",
     "complete_models",
     "decision",
@@ -1706,48 +1702,6 @@ def decision(
 true = And()  # type: And[Bottom]
 #: A node that's always false. Technically an Or node without children.
 false = Or()  # type: Or[Bottom]
-
-
-class Builder:
-    """Automatically deduplicates NNF nodes as you make them, to save memory.
-
-    Usage:
-
-    >>> builder = Builder()
-    >>> var = builder.Var('A')
-    >>> var2 = builder.Var('A')
-    >>> var is var2
-    True
-
-    As long as the Builder object exists, the nodes it made will be kept in
-    memory. Make sure not to keep it around longer than you need.
-
-    It's often a better idea to avoid creating nodes multiple times in the
-    first place. That will save processing time as well as memory.
-
-    If you use a Builder, avoid using operators. Even negating variables
-    should be done with ``builder.Var(name, False)`` or they won't be
-    deduplicated.
-    """
-    def __init__(self, seed: t.Iterable[NNF] = ()) -> None:
-        """:param seed: Nodes to store for reuse in advance."""
-        self.stored = {true: true, false: false}  # type: t.Dict[NNF, NNF]
-        for node in seed:
-            self.stored[node] = node
-        self.true = true
-        self.false = false
-
-    def Var(self, name: Name, true: bool = True) -> 'nnf.Var':
-        ret = Var(name, true)
-        return self.stored.setdefault(ret, ret)  # type: ignore
-
-    def And(self, children: t.Iterable[T_NNF] = ()) -> 'nnf.And[T_NNF]':
-        ret = And(children)
-        return self.stored.setdefault(ret, ret)  # type: ignore
-
-    def Or(self, children: t.Iterable[T_NNF] = ()) -> 'nnf.Or[T_NNF]':
-        ret = Or(children)
-        return self.stored.setdefault(ret, ret)  # type: ignore
 
 
 class _Setting(t.Generic[T]):
