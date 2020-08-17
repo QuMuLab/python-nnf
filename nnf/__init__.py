@@ -1518,6 +1518,26 @@ class Internal(NNF, t.Generic[T_NNF_co]):
         else:
             return "{}()".format(self.__class__.__name__)
 
+    def _repr_pretty_(self, printer: t.Any, cycle: bool) -> None:
+        """Pretty-printing for IPython and Hypothesis.
+
+        https://ipython.rtfd.io/en/stable/api/generated/IPython.lib.pretty.html
+        """
+        if not self.children:
+            printer.text(repr(self))
+            return
+        name = self.__class__.__name__
+        if cycle:
+            # Impossible except by malicious use of object.__setattr__
+            printer.text("{}(...)".format(name))
+            return
+        with printer.group(len(name) + 2, name + "({", "})"):
+            for ind, child in enumerate(self):
+                if ind:
+                    printer.text(",")
+                    printer.breakable()
+                printer.pretty(child)
+
     def leaf(self) -> bool:
         if self.children:
             return False
@@ -1588,6 +1608,10 @@ class And(Internal[T_NNF_co]):
             return 'true'
         return super().__repr__()
 
+    def _repr_pretty_(self, printer: t.Any, cycle: bool) -> None:
+        # An explicit definition is necessary or it will be ignored
+        return super()._repr_pretty_(printer, cycle)
+
     if t.TYPE_CHECKING:
         def negate(self) -> 'Or[NNF]':
             ...
@@ -1654,6 +1678,9 @@ class Or(Internal[T_NNF_co]):
         if not self.children:
             return 'false'
         return super().__repr__()
+
+    def _repr_pretty_(self, printer: t.Any, cycle: bool) -> None:
+        return super()._repr_pretty_(printer, cycle)
 
     if t.TYPE_CHECKING:
         def negate(self) -> 'And[NNF]':
