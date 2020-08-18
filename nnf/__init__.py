@@ -1240,34 +1240,20 @@ class NNF(metaclass=abc.ABCMeta):
 
     def _models_decomposable(self) -> t.Iterator[Model]:
         """Model enumeration for decomposable sentences."""
-        if not self.satisfiable():
-            return
-        names = tuple(self.vars())
-        model_tree = {}  # type: t.Dict[bool, t.Any]
+        names = list(self.vars())
 
-        def leaves(
-                tree: t.Dict[bool, t.Any],
-                path: t.Tuple[bool, ...] = ()
-        ) -> t.Iterator[t.Tuple[t.Dict[bool, t.Any], t.Tuple[bool, ...]]]:
-            if not tree:
-                yield tree, path
-            else:
-                for key, val in tree.items():
-                    yield from leaves(val, path + (key,))
+        def models(index: int, cur_model: Model) -> t.Iterator[Model]:
+            if not self._consistent_with_model(cur_model):
+                return
+            if index >= len(names):
+                yield cur_model
+                return
+            for value in True, False:
+                model = cur_model.copy()
+                model[names[index]] = value
+                yield from models(index + 1, model)
 
-        for var in names:
-            for leaf, path in leaves(model_tree):
-                model = dict(zip(names, path))
-                model[var] = True
-                if self._consistent_with_model(model):
-                    leaf[True] = {}
-                model[var] = False
-                if self._consistent_with_model(model):
-                    leaf[False] = {}
-                assert leaf  # at least one of them has to be satisfiable
-
-        for leaf, path in leaves(model_tree):
-            yield dict(zip(names, path))
+        return models(0, {})
 
     def is_CNF(self, strict: bool = False) -> bool:
         """Return whether the sentence is in the Conjunctive Normal Form.
