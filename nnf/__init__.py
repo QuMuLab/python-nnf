@@ -506,7 +506,8 @@ class NNF(metaclass=abc.ABCMeta):
                 elif isinstance(node, And):
                     return functools.reduce(
                         operator.mul,
-                        (count(child) for child in node.children)
+                        (count(child) for child in node.children),
+                        1,
                     )
                 else:
                     raise TypeError(node)

@@ -387,6 +387,12 @@ def test_models_deterministic_sanity(sentence: nnf.NNF):
     )
 
 
+def test_models_deterministic_trivial():
+    assert list(nnf.true._models_deterministic()) == [{}]
+    assert list(nnf.false._models_deterministic()) == []
+    assert list(a._models_deterministic()) == [{"a": True}]
+
+
 @pytest.mark.parametrize(
     'sentence, size',
     [
