@@ -797,6 +797,7 @@ class NNF(metaclass=abc.ABCMeta):
         NNF.is_MODS.set(new, True)
         NNF._is_DNF_loose.set(new, True)
         NNF._is_DNF_strict.set(new, True)
+        new.mark_deterministic()
         return new
 
     def to_model(self) -> Model:
