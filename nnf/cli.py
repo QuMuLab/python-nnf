@@ -121,40 +121,30 @@ def main(argv: t.Sequence[str] = sys.argv[1:]) -> int:
     return args.func(args)  # type: ignore
 
 
-def sentence_stats(verbose: bool, sentence: NNF) -> SimpleNamespace:
-    stats = SimpleNamespace()
-    stats.decomposable = sentence.decomposable()
-    stats.cnf = sentence.is_CNF()
-    stats.smooth = sentence.smooth()
-    stats.vars = len(sentence.vars())
-    stats.size = sentence.size()
-    stats.clauses = None
-    stats.clause_size = None
-    if verbose:
-        if stats.cnf:
-            print("Sentence is in CNF.")
-        if stats.decomposable:
-            print("Sentence is decomposable.")
-        if stats.smooth:
-            print("Sentence is smooth.")
-        print("Variables:   {}".format(stats.vars))
-        print("Size:        {}".format(stats.size))
-        if stats.cnf:
-            stats.clauses = len(sentence)  # type: ignore
-            print("Clauses:     {}".format(stats.clauses))
-            sizes = {len(clause) for clause in sentence}  # type: ignore
-            stats.clause_size = min(sizes), max(sizes)
-            if stats.clause_size[0] == stats.clause_size[1]:
-                print("Clause size: {}".format(stats.clause_size[0]))
-            else:
-                print("Clause size: {}-{}".format(*stats.clause_size))
-    return stats
+def print_stats(sentence: NNF) -> None:
+    if sentence.is_CNF():
+        print("Sentence is in CNF.")
+    if sentence.decomposable():
+        print("Sentence is decomposable.")
+    if sentence.smooth():
+        print("Sentence is smooth.")
+    print("Variables:   {}".format(len(sentence.vars())))
+    print("Size:        {}".format(sentence.size()))
+    if sentence.is_CNF():
+        print("Clauses:     {}".format(len(sentence)))  # type: ignore
+        sizes = {len(clause) for clause in sentence}  # type: ignore
+        low, high = min(sizes), max(sizes)
+        if low == high:
+            print("Clause size: {}".format(low))
+        else:
+            print("Clause size: {}-{}".format(low, high))
 
 
 def sat(args: argparse.Namespace) -> int:
     with open_read(args.file) as f:
         sentence = dimacs.load(f)
-    sentence_stats(args.verbose, sentence)
+    if args.verbose:
+        print_stats(sentence)
     with timer(args):
         sat = sentence.satisfiable()
     if sat:
@@ -172,7 +162,8 @@ def sharpsat(args: argparse.Namespace) -> int:
         sentence = dimacs.load(f)
     if args.deterministic:
         sentence.mark_deterministic()
-    sentence_stats(args.verbose, sentence)
+    if args.verbose:
+        print_stats(sentence)
     with timer(args):
         num = sentence.model_count()
     if args.quiet:
@@ -187,7 +178,7 @@ def sharpsat(args: argparse.Namespace) -> int:
 def info(args: argparse.Namespace) -> int:
     with open_read(args.file) as f:
         sentence = dimacs.load(f)
-    sentence_stats(True, sentence)
+    print_stats(sentence)
     return 0
 
 
