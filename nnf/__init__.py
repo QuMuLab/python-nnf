@@ -448,6 +448,8 @@ class NNF(metaclass=abc.ABCMeta):
             return None
         elif backend == "pysat":
             return pysat.solve(t.cast("And[Or[Var]]", self))
+        elif backend == "kissat":
+            return kissat.solve(t.cast("And[Or[Var]]", self))
         raise AssertionError(config.sat_backend)
 
     def _decomposable_solve(self) -> t.Optional[Model]:
