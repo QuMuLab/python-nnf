@@ -354,9 +354,9 @@ def test_cnf_benchmark_data(fname: str, clauses: int):
 
 
 def test_dsharp_output():
-    with open(satlib / "uf20-01.nnf") as f:
+    with (satlib / "uf20-01.nnf").open() as f:
         sentence = dsharp.load(f)
-    with open(satlib / "uf20-01.cnf") as f:
+    with (satlib / "uf20-01.cnf").open() as f:
         clauses = dimacs.load(f)
     assert sentence.decomposable()
     # this is not a complete check, but clauses.models() is very expensive
