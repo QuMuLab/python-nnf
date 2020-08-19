@@ -634,7 +634,7 @@ class NNF(metaclass=abc.ABCMeta):
             return self._cnf_models_native()
         elif config.models_backend == "pysat":
             return pysat.models(self)  # type: ignore
-        raise AssertionError(config.sat_backend)
+        raise AssertionError(config.models_backend)
 
     def _cnf_models_native(self) -> t.Iterator[Model]:
         """A naive DPLL SAT solver, modified to find all solutions."""
