@@ -1,7 +1,7 @@
 import importlib
 import typing as t
 
-from nnf import And, Or, Var, config, all_models, true
+from nnf import And, Or, Var, config, true
 from nnf.util import Model, Name
 
 try:
@@ -88,10 +88,7 @@ def solve(sentence: And[Or[Var]]) -> t.Optional[Model]:
     with solver:
         if not solver.solve():
             return None
-        solution = {decode[abs(num)]: num > 0 for num in solver.get_model()}
-    for key in sentence.vars() - solution.keys():
-        solution[key] = True
-    return solution
+        return {decode[abs(num)]: num > 0 for num in solver.get_model()}
 
 
 def models(sentence: And[Or[Var]]) -> t.Iterator[Model]:
@@ -103,14 +100,5 @@ def models(sentence: And[Or[Var]]) -> t.Iterator[Model]:
     with solver:
         if not solver.solve():
             return
-        diff = None
         for model in solver.enum_models():
-            solution = {decode[abs(num)]: num > 0 for num in model}
-            if diff is None:
-                diff = sentence.vars() - solution.keys()
-            if diff:
-                for supplement in all_models(diff):
-                    supplement.update(solution)
-                    yield supplement
-            else:
-                yield solution
+            yield {decode[abs(num)]: num > 0 for num in model}
