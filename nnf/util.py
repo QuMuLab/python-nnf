@@ -81,7 +81,7 @@ def weakref_memoize(
     return t.cast(_WeakrefMemoized[T_NNF, T], wrapped)
 
 
-class _WeakrefMemoized(t.Generic[T_NNF, T]):
+class _WeakrefMemoized(t.Generic[T_NNF, T]):  # pragma: no cover
     """Fake class for typechecking. Should never be instantiated."""
     def __init__(self) -> None:
         assert t.TYPE_CHECKING, "Not a real class"

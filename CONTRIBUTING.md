@@ -12,6 +12,8 @@ This will install and run all the tooling.
 
 `tox` aborts early if one of the steps fails. To run just the tests (for example if you can't get `mypy` to work), install and run [`pytest`](https://docs.pytest.org/en/latest/getting-started.html). To run just one particular test, run `pytest -k <name of test>`.
 
+To gather coverage information you can install `pytest-cov` and run `pytest --cov=nnf` followed by `coverage html`. This will generate a coverage report in a `htmlcov/` directory.
+
 ## Mypy
 
 [Mypy](https://mypy.readthedocs.io/en/stable/) is used for static typing. This is also managed by `tox`.

@@ -60,10 +60,7 @@ def dump(
     """
     if num_variables is None:
         if var_labels is None:
-            if t.TYPE_CHECKING:
-                names = frozenset()  # type: t.FrozenSet[int]
-            else:
-                names = obj.vars()
+            names = t.cast("t.FrozenSet[int]", obj.vars())
             for name in names:
                 if not isinstance(name, int) or name <= 0:
                     raise EncodeError(
