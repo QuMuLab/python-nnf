@@ -13,8 +13,17 @@ neg_inf = float('-inf')
 
 T = t.TypeVar('T')
 
-__all__ = ('eval', 'reduce', 'SAT', 'NUM_SAT', 'WMC', 'PROB', 'GRAD', 'MPE',
-           'maxplus_reduce')
+__all__ = (
+    "eval",
+    "reduce",
+    "SAT",
+    "NUM_SAT",
+    "WMC",
+    "PROB",
+    "GRAD",
+    "MPE",
+    "maxplus_reduce",
+)
 
 
 def eval(

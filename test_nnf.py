@@ -1,11 +1,11 @@
 import copy
+import pathlib
 import pickle
 import platform
 import shutil
-import os
+import threading
 import types
-
-from pathlib import Path
+import typing as t
 
 import pytest
 
@@ -15,7 +15,7 @@ from hypothesis import (assume, event, given, strategies as st, settings,
 import nnf
 
 from nnf import (Var, And, Or, amc, dimacs, dsharp, operators,
-                 tseitin, complete_models, using_kissat)
+                 tseitin, complete_models, config, pysat, all_models)
 
 memoized = [
     method
@@ -35,16 +35,14 @@ a, b, c = Var('a'), Var('b'), Var('c')
 fig1a = (~a & b) | (a & ~b)
 fig1b = (~a | ~b) & (a | b)
 
-uf20 = [
-    dsharp.load(file.open())
-    for file in (Path(os.path.dirname(__file__))
-                 / 'testdata' / 'satlib' / 'uf20').glob('*.nnf')
-]
+satlib = pathlib.Path(__file__).parent / "testdata" / "satlib"
+uf20 = [dsharp.load(file.open()) for file in (satlib / "uf20").glob("*.nnf")]
 uf20_cnf = [
-    dimacs.load(file.open())
-    for file in (Path(os.path.dirname(__file__))
-                 / 'testdata' / 'satlib' / 'uf20').glob('*.cnf')
-]
+    dimacs.load(file.open()) for file in (satlib / "uf20").glob("*.cnf")
+]  # type: t.List[And[Or[Var]]]
+
+# Test config default value before the tests start mucking with the state
+assert config.sat_backend == "auto"
 
 
 def test_all_models_basic():
@@ -306,6 +304,11 @@ p cnf 4 3
     })
 
 
+def test_dimacs_rejects_weird_digits():
+    with pytest.raises(dimacs.DecodeError):
+        dimacs.loads("p cnf 1 1\n¹ 0")
+
+
 @given(NNF())
 def test_arbitrary_dimacs_sat_serialize(sentence: nnf.NNF):
     assert dimacs.loads(dimacs.dumps(sentence)) == sentence
@@ -331,7 +334,7 @@ def test_dimacs_cnf_serialize_accepts_only_cnf(sentence: nnf.NNF):
         dimacs.dumps(sentence, mode='cnf')
     else:
         event("Not CNF sentence")
-        with pytest.raises(TypeError):
+        with pytest.raises(dimacs.EncodeError):
             dimacs.dumps(sentence, mode='cnf')
 
 
@@ -345,22 +348,15 @@ def test_dimacs_cnf_serialize_accepts_only_cnf(sentence: nnf.NNF):
     ]
 )
 def test_cnf_benchmark_data(fname: str, clauses: int):
-    with open(os.path.dirname(__file__) + '/testdata/satlib/' + fname) as f:
+    with (satlib / fname).open() as f:
         sentence = dimacs.load(f)
     assert isinstance(sentence, And) and len(sentence.children) == clauses
 
 
-@pytest.mark.parametrize(
-    'fname',
-    [
-        'uf20-01'
-    ]
-)
-def test_dsharp_output(fname: str):
-    basepath = os.path.dirname(__file__) + '/testdata/satlib/' + fname
-    with open(basepath + '.nnf') as f:
+def test_dsharp_output():
+    with (satlib / "uf20-01.nnf").open() as f:
         sentence = dsharp.load(f)
-    with open(basepath + '.cnf') as f:
+    with (satlib / "uf20-01.cnf").open() as f:
         clauses = dimacs.load(f)
     assert sentence.decomposable()
     # this is not a complete check, but clauses.models() is very expensive
@@ -380,11 +376,21 @@ def test_to_model(model: dict):
     assert sentence.to_model() == model
 
 
-@given(NNF())
-def test_models_smart_equivalence(sentence: nnf.NNF):
-    dumb = list(sentence.models())
-    smart = list(sentence._models_deterministic())
-    assert model_set(dumb) == model_set(smart)
+@given(DNNF())
+def test_models_deterministic_sanity(sentence: nnf.NNF):
+    """Running _models_deterministic() on a non-deterministic decomposable
+    sentence may return duplicate models but should not return unsatisfying
+    models and should return each satisfying model at least once.
+    """
+    assert model_set(sentence._models_decomposable()) == model_set(
+        sentence._models_deterministic()
+    )
+
+
+def test_models_deterministic_trivial():
+    assert list(nnf.true._models_deterministic()) == [{}]
+    assert list(nnf.false._models_deterministic()) == []
+    assert list(a._models_deterministic()) == [{"a": True}]
 
 
 @pytest.mark.parametrize(
@@ -488,22 +494,10 @@ def test_uf20_models():
 
     for sentence in uf20:
         assert sentence.decomposable()
-        m = list(sentence.models(deterministic=False))
+        m = list(sentence._models_decomposable())
         models = model_set(m)
         assert len(m) == len(models)
-        assert models == model_set(sentence.models(deterministic=True))
-
-
-@given(NNF())
-def test_deterministic_models_always_works(sentence: nnf.NNF):
-    if sentence.deterministic():
-        event("Sentence is deterministic")
-    else:
-        event("Sentence is not deterministic")
-    with_det = list(sentence.models(deterministic=True))
-    no_det = list(sentence.models(deterministic=False))
-    assert len(with_det) == len(no_det)
-    assert model_set(with_det) == model_set(no_det)
+        assert models == model_set(sentence._models_deterministic())
 
 
 def test_instantiating_base_classes_fails():
@@ -531,6 +525,7 @@ def test_model_counting(sentence: nnf.NNF):
 
 def test_uf20_model_counting():
     for sentence in uf20:
+        nnf.NNF._deterministic_sentences.pop(id(sentence), None)
         assert sentence.model_count() == len(list(sentence.models()))
         sentence.mark_deterministic()
         assert sentence.model_count() == len(list(sentence.models()))
@@ -550,6 +545,7 @@ def test_validity(sentence: nnf.NNF):
 
 def test_uf20_validity():
     for sentence in uf20:
+        nnf.NNF._deterministic_sentences.pop(id(sentence), None)
         assert not sentence.valid()
         sentence.mark_deterministic()
         assert not sentence.valid()
@@ -691,14 +687,6 @@ def test_implies(a: nnf.NNF, b: nnf.NNF):
         event("No implication")
         assert any(not b.condition(model).valid()
                    for model in a.models())
-
-
-@given(CNF())
-def test_cnf_sat(sentence: nnf.NNF):
-    assert sentence.is_CNF()
-    models_ = list(sentence.models())
-    assert model_set(models_) == model_set(sentence._models_deterministic())
-    assert sentence.satisfiable() == bool(models_)
 
 
 def test_uf20_cnf_sat():
@@ -906,20 +894,199 @@ def test_complete_models(model: nnf.And[nnf.Var]):
 
 if (platform.uname().system, platform.uname().machine) == ('Linux', 'x86_64'):
 
+    @config(sat_backend="kissat")
     def test_kissat_uf20():
         for sentence in uf20_cnf:
-            with using_kissat():
-                assert sentence.satisfiable()
+            assert sentence.satisfiable()
 
+    @config(sat_backend="kissat")
     @given(CNF())
     def test_kissat_cnf(sentence: And[Or[Var]]):
-        with using_kissat():
-            assert sentence.satisfiable() == sentence._cnf_satisfiable_native()
+        assert sentence.satisfiable() == sentence._cnf_satisfiable_native()
 
+    @config(sat_backend="kissat")
     @given(NNF())
     def test_kissat_nnf(sentence: And[Or[Var]]):
-        with using_kissat():
-            assert (
-                sentence.satisfiable()
-                == tseitin.to_CNF(sentence)._cnf_satisfiable_native()
+        assert (
+            sentence.satisfiable()
+            == tseitin.to_CNF(sentence)._cnf_satisfiable_native()
+        )
+
+
+@config(sat_backend="auto")
+def test_config():
+    assert config.sat_backend == "auto"
+
+    # Imperative style works
+    config.sat_backend = "native"
+    assert config.sat_backend == "native"
+
+    # Context manager works
+    with config(sat_backend="kissat"):
+        assert config.sat_backend == "kissat"
+    assert config.sat_backend == "native"
+
+    # Bad values are caught
+    with pytest.raises(ValueError):
+        config.sat_backend = "invalid"
+
+    # In context managers too, before we enter
+    with pytest.raises(ValueError):
+        with config(sat_backend="invalid"):
+            assert False
+
+    config.sat_backend = "kissat"
+    assert config.sat_backend == "kissat"
+
+    # Old value is restored when we leave, even if changed inside
+    # (this may or may not be desirable behavior, but if it changes
+    # we should know)
+    with config(sat_backend="native"):
+        assert config.sat_backend == "native"
+        config.sat_backend = "auto"
+        assert config.sat_backend == "auto"
+    assert config.sat_backend == "kissat"
+
+    # Bad settings are caught
+    with pytest.raises(AttributeError):
+        config.invalid = "somevalue"
+
+    # Decorator works
+    @config(sat_backend="native")
+    def somefunc(recurse=False):
+        assert config.sat_backend == "native"
+        if recurse:
+            # Even if we call it again while it's in progress
+            config.sat_backend = "auto"
+            somefunc(recurse=False)
+            assert config.sat_backend == "auto"
+
+    somefunc()
+    assert config.sat_backend == "kissat"
+    somefunc(recurse=True)
+    assert config.sat_backend == "kissat"
+
+    # Context managers can be reused and nested without getting confused
+    reentrant_cm = config(sat_backend="auto")
+    assert config.sat_backend == "kissat"
+    with reentrant_cm:
+        assert config.sat_backend == "auto"
+        config.sat_backend = "native"
+        with reentrant_cm:
+            assert config.sat_backend == "auto"
+        assert config.sat_backend == "native"
+    assert config.sat_backend == "kissat"
+
+
+@config(sat_backend="auto")
+def test_config_multithreading():
+    # Settings from one thread don't affect another
+    config.sat_backend = "native"
+
+    def f():
+        assert config.sat_backend == "auto"
+        config.sat_backend = "kissat"
+        assert config.sat_backend == "kissat"
+
+    thread = threading.Thread(target=f)
+    thread.start()
+    thread.join()
+
+    assert config.sat_backend == "native"
+
+
+@given(NNF())
+def test_solve(sentence: nnf.NNF):
+    solution = sentence.solve()
+    if solution is None:
+        assert not sentence.satisfiable()
+    else:
+        assert sentence.satisfiable()
+        assert sentence.satisfied_by(solution)
+
+
+@pytest.fixture(
+    scope="module",
+    params=[
+        "cadical",
+        "glucose30",
+        "glucose41",
+        "lingeling",
+        "maplechrono",
+        "maplecm",
+        "maplesat",
+        "minicard",
+        "minisat22",
+        "minisat-gh",
+    ],
+)
+def pysat_solver(request):
+    return config(pysat_solver=request.param)
+
+
+if pysat.available:
+
+    @given(sentence=CNF())
+    def test_pysat_satisfiable(sentence: And[Or[Var]], pysat_solver):
+        with pysat_solver:
+            assert sentence._cnf_satisfiable_native() == pysat.satisfiable(
+                sentence
             )
+
+    @given(sentence=CNF())
+    def test_pysat_models(sentence: And[Or[Var]], pysat_solver):
+        native_models = list(sentence._cnf_models_native())
+        with pysat_solver:
+            pysat_models = list(pysat.models(sentence))
+        native_set = model_set(native_models)
+        pysat_set = model_set(pysat_models)
+        assert native_set == pysat_set
+        assert (
+            len(native_models)
+            == len(pysat_models)
+            == len(native_set)
+            == len(pysat_set)
+        )
+
+    @given(sentence=CNF())
+    def test_pysat_solve(sentence: And[Or[Var]], pysat_solver):
+        with pysat_solver:
+            native_solution = sentence._cnf_solve()
+            pysat_solution = pysat.solve(sentence)
+            if native_solution is None:
+                assert pysat_solution is None
+                assert not sentence._cnf_satisfiable_native()
+                assert not pysat.satisfiable(sentence)
+            else:
+                assert pysat_solution is not None
+                assert sentence.satisfied_by(native_solution)
+                assert sentence.satisfied_by(pysat_solution)
+                assert sentence._cnf_satisfiable_native()
+                assert pysat.satisfiable(sentence)
+
+    def test_pysat_uf20(pysat_solver):
+        with pysat_solver:
+            for sentence in uf20_cnf:
+                assert pysat.satisfiable(sentence)
+                solution = pysat.solve(sentence)
+                assert solution
+                assert sentence.satisfied_by(solution)
+
+
+@given(NNF())
+def test_satisfiable(sentence: nnf.NNF):
+    assert sentence.satisfiable() == any(
+        sentence.satisfied_by(model) for model in all_models(sentence.vars())
+    )
+
+
+@given(NNF())
+def test_models(sentence: nnf.NNF):
+    real_models = [
+        model
+        for model in all_models(sentence.vars())
+        if sentence.satisfied_by(model)
+    ]
+    models = list(sentence.models())
+    assert len(real_models) == len(models)
+    assert model_set(real_models) == model_set(models)

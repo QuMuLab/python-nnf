@@ -18,6 +18,9 @@ setuptools.setup(
     install_requires=[
         'typing;python_version<"3.5"',
     ],
+    extras_require={
+        "pysat": ["python-sat"],
+    },
     entry_points={
         'console_scripts': [
             'pynnf = nnf.cli:main',

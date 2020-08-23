@@ -19,6 +19,9 @@ import functools
 import itertools
 import operator
 import os
+import shutil
+import subprocess
+import threading
 import typing as t
 import uuid
 import weakref
@@ -31,20 +34,35 @@ from nnf.util import (
     T_NNF,
     U_NNF,
     T_NNF_co,
-    _Tristate,
     Bottom,
     Name,
     Model,
+    T,
+    ReusableLazyIterable,
 )
 
-if t.TYPE_CHECKING:
-    import nnf
 
-
-__all__ = ('NNF', 'Internal', 'And', 'Or', 'Var', 'Aux', 'Builder',
-           'all_models', 'complete_models', 'decision', 'true', 'false',
-           'dsharp', 'dimacs', 'amc', 'kissat', 'using_kissat', 'tseitin',
-           'operators')
+__all__ = (
+    "NNF",
+    "Internal",
+    "And",
+    "Or",
+    "Var",
+    "Aux",
+    "all_models",
+    "complete_models",
+    "decision",
+    "true",
+    "false",
+    "dsharp",
+    "dimacs",
+    "amc",
+    "kissat",
+    "config",
+    "tseitin",
+    "operators",
+    "pysat",
+)
 
 
 def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
@@ -64,26 +82,6 @@ def all_models(names: 't.Iterable[Name]') -> t.Iterator[Model]:
             new = model.copy()
             new[name] = True
             yield new
-
-
-# Valid values: native and kissat
-SAT_BACKEND = 'native'
-
-
-class using_kissat():
-    """Context manager to use the kissat solver in a block of code."""
-
-    def __init__(self) -> None:
-        self.setting = SAT_BACKEND
-
-    def __enter__(self) -> 'using_kissat':
-        global SAT_BACKEND
-        SAT_BACKEND = 'kissat'
-        return self
-
-    def __exit__(self, *_: t.Any) -> None:
-        global SAT_BACKEND
-        SAT_BACKEND = self.setting
 
 
 class NNF(metaclass=abc.ABCMeta):
@@ -396,33 +394,90 @@ class NNF(metaclass=abc.ABCMeta):
 
     entails = implies
 
-    def models(self, *, deterministic: _Tristate = None) -> t.Iterator[Model]:
+    def models(self) -> t.Iterator[Model]:
         """Yield all dictionaries of values that make the sentence correct.
 
-        Much faster on sentences that are deterministic or decomposable or
-        both.
-
-        The algorithm for deterministic sentences works on non-deterministic
-        sentences, but may be much slower for such sentences. Pass
-        ``deterministic=True`` to use it anyway. This can give a speedup in
-        some cases.
-
-        :param deterministic: If ``True``, treat the sentence as if it's
-                              deterministic. If ``False``, treat it as if it
-                              isn't, even if it's marked otherwise.
+        Much faster on sentences that are decomposable. Even faster if they're
+        also deterministic.
         """
-        if deterministic is None:
-            deterministic = self.marked_deterministic()
         if self.is_CNF():
             yield from self._cnf_models()
-        elif deterministic:
-            yield from self._models_deterministic()
         elif self.decomposable():
-            yield from self._models_decomposable()
+            if self.marked_deterministic():
+                yield from self._models_deterministic()
+            else:
+                yield from self._models_decomposable()
         else:
-            for model in all_models(self.vars()):
-                if self.satisfied_by(model):
-                    yield model
+            names = self.vars()
+            for model in complete_models(self.to_CNF().models(), names):
+                yield {
+                    name: value
+                    for name, value in model.items()
+                    if name in names
+                }
+
+    def solve(self) -> t.Optional[Model]:
+        """Return a satisfying model, or ``None`` if unsatisfiable."""
+        if self.is_CNF():
+            return self._cnf_solve()
+        elif self.decomposable():
+            # No special handling for d-DNNF, _decomposable_solve() already
+            # uses a similar strategy to _models_deterministic()
+            return self._decomposable_solve()
+        else:
+            solution = self.to_CNF()._cnf_solve()
+            if solution is None:
+                return None
+            for key in solution.keys() - self.vars():
+                del solution[key]
+            for key in self.vars() - solution.keys():
+                solution[key] = True
+            return solution
+
+    def _cnf_solve(self) -> t.Optional[Model]:
+        # _cnf_satisfiable() always uses the native solver for very small
+        # sentences because it outperforms pysat significantly for those,
+        # but there's no such difference here, so we don't bother
+        backend = config.sat_backend
+        if backend == "auto":
+            backend = "pysat" if pysat.available else "native"
+
+        if backend == "native":
+            for model in self._cnf_models_native():
+                return model
+            return None
+        elif backend == "pysat":
+            return pysat.solve(t.cast("And[Or[Var]]", self))
+        elif backend == "kissat":
+            return kissat.solve(t.cast("And[Or[Var]]", self))
+        raise AssertionError(config.sat_backend)
+
+    def _decomposable_solve(self) -> t.Optional[Model]:
+        @memoize
+        def solve(node: NNF) -> t.Optional[Model]:
+            if isinstance(node, Var):
+                return {node.name: node.true}
+            elif isinstance(node, And):
+                model = {}
+                for child in node:
+                    extra = solve(child)
+                    if extra is None:
+                        return None
+                    model.update(extra)
+                return model
+            elif isinstance(node, Or):
+                for child in node:
+                    solution = solve(child)
+                    if solution is not None:
+                        return solution
+                return None
+            raise AssertionError(node)
+
+        solution = solve(self)
+        if solution is not None:
+            for key in self.vars() - solution.keys():
+                solution[key] = True
+        return solution
 
     def model_count(self) -> int:
         """Return the number of models the sentence has.
@@ -453,7 +508,8 @@ class NNF(metaclass=abc.ABCMeta):
                 elif isinstance(node, And):
                     return functools.reduce(
                         operator.mul,
-                        (count(child) for child in node.children)
+                        (count(child) for child in node.children),
+                        1,
                     )
                 else:
                     raise TypeError(node)
@@ -500,18 +556,26 @@ class NNF(metaclass=abc.ABCMeta):
 
     def to_CNF(self) -> 'And[Or[Var]]':
         """Compile theory to a semantically equivalent CNF formula."""
-        from nnf import tseitin
         return tseitin.to_CNF(self)
 
     def _cnf_satisfiable(self) -> bool:
         """Call a SAT solver on the presumed CNF theory."""
-        if SAT_BACKEND == 'native':
+        self = t.cast("And[Or[Var]]", self)
+        if len(self) <= 5:
+            # Always faster for such small sentences
             return self._cnf_satisfiable_native()
-        elif SAT_BACKEND == 'kissat':
-            from nnf import kissat
-            return kissat.solve(t.cast(And[Or[Var]], self)) is not None
-        else:
-            raise NotImplementedError('Unrecognized SAT backend: '+SAT_BACKEND)
+
+        backend = config.sat_backend
+        if backend == "auto":
+            backend = "pysat" if pysat.available else "native"
+
+        if backend == "native":
+            return self._cnf_satisfiable_native()
+        elif backend == "pysat":
+            return pysat.satisfiable(self)
+        elif backend == "kissat":
+            return kissat.solve(self) is not None
+        raise AssertionError(config.sat_backend)
 
     def _cnf_satisfiable_native(self) -> bool:
         """A naive DPLL SAT solver."""
@@ -566,6 +630,13 @@ class NNF(metaclass=abc.ABCMeta):
         )
 
     def _cnf_models(self) -> t.Iterator[Model]:
+        if config.models_backend in {"native", "auto"}:
+            return self._cnf_models_native()
+        elif config.models_backend == "pysat":
+            return pysat.models(self)  # type: ignore
+        raise AssertionError(config.models_backend)
+
+    def _cnf_models_native(self) -> t.Iterator[Model]:
         """A naive DPLL SAT solver, modified to find all solutions."""
         def DPLL_models(
                 clauses: t.FrozenSet[t.FrozenSet[Var]]
@@ -729,6 +800,7 @@ class NNF(metaclass=abc.ABCMeta):
         NNF.is_MODS.set(new, True)
         NNF._is_DNF_loose.set(new, True)
         NNF._is_DNF_strict.set(new, True)
+        new.mark_deterministic()
         return new
 
     def to_model(self) -> Model:
@@ -1098,90 +1170,94 @@ class NNF(metaclass=abc.ABCMeta):
             ['}\n']
         )
 
-    def _models_deterministic(self) -> t.Iterator[Model]:
-        """Model enumeration for deterministic sentences.
+    if shutil.which("dot"):
 
-        Slightly faster for sentences that are also decomposable.
-        """
+        def _repr_svg_(self) -> str:
+            """Pretty rendering in Jupyter notebooks using graphviz.
+
+            Inspired by the `graphviz<https://pypi.org/p/graphviz>`_ Python
+            package, which implements _repr_svg_ the same way.
+            """
+            src = self.to_DOT()
+            proc = subprocess.Popen(
+                ["dot", "-Tsvg"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                universal_newlines=True,
+            )
+            out, _ = proc.communicate(src)
+            return out
+
+    def _models_deterministic(self) -> t.Iterator[Model]:
+        """Model enumeration for deterministic decomposable sentences."""
         ModelInt = t.FrozenSet[t.Tuple[Name, bool]]
 
-        if self.decomposable():
-            def compatible(a: ModelInt, b: ModelInt) -> bool:
-                return True
-        else:
-            def compatible(a: ModelInt, b: ModelInt) -> bool:
-                if len(a) > len(b):
-                    a, b = b, a
-                return not any((name, not value) in b for name, value in a)
+        def lazyproduct(
+            iterables: t.Iterator[t.Iterable[ModelInt]],
+        ) -> t.Iterator[ModelInt]:
+            """Very specialized itertools.product alternative.
+
+            Relies on iterables being an iterator, so we can take one and pass
+            it on, while each iterable yielded by iterables is reusable.
+            """
+            iterable = next(iterables, None)
+            if iterable is None:
+                yield frozenset()
+                return
+            for model in lazyproduct(iterables):
+                for own_model in iterable:
+                    yield model | own_model
 
         @memoize
-        def extract(node: NNF) -> t.Set[ModelInt]:
+        def extract(node: NNF) -> t.Iterable[ModelInt]:
             if isinstance(node, Var):
-                return {frozenset(((node.name, node.true),))}
+                return [frozenset(((node.name, node.true),))]
             elif isinstance(node, Or):
-                return {model
-                        for child in node.children
-                        for model in extract(child)}
+                return ReusableLazyIterable(
+                    model
+                    for child in node.children
+                    for model in extract(child)
+                )
             elif isinstance(node, And):
-                models = {frozenset()}  # type: t.Set[ModelInt]
-                for child in node.children:
-                    models = {existing | new
-                              for new in extract(child)
-                              for existing in models
-                              if compatible(existing, new)}
-                return models
-            raise TypeError(node)
+                return ReusableLazyIterable(
+                    lazyproduct(extract(child) for child in node.children)
+                )
+            else:
+                raise TypeError(node)
 
         names = self.vars()
-        full_models = set()  # type: t.Set[ModelInt]
 
         def complete(
                 model: ModelInt,
-                names: t.List[Name]
+                names: t.FrozenSet[Name]
         ) -> t.Iterator[ModelInt]:
             for expansion in all_models(names):
                 yield frozenset(model | expansion.items())
 
         for model in extract(self):
-            missing_names = list(names - {name for name, value in model})
+            missing_names = names - {name for name, _ in model}
             if not missing_names:
-                full_models.add(model)
+                yield dict(model)
             else:
-                full_models.update(complete(model, missing_names))
-
-        for full_model in full_models:
-            yield dict(full_model)
+                for full_model in complete(model, missing_names):
+                    yield dict(full_model)
 
     def _models_decomposable(self) -> t.Iterator[Model]:
         """Model enumeration for decomposable sentences."""
-        if not self.satisfiable():
-            return
-        names = tuple(self.vars())
-        model_tree = {}  # type: t.Dict[bool, t.Any]
+        names = list(self.vars())
 
-        def leaves(
-                tree: t.Dict[bool, t.Any],
-                path: t.Tuple[bool, ...] = ()
-        ) -> t.Iterator[t.Tuple[t.Dict[bool, t.Any], t.Tuple[bool, ...]]]:
-            if not tree:
-                yield tree, path
-            else:
-                for key, val in tree.items():
-                    yield from leaves(val, path + (key,))
+        def models(index: int, cur_model: Model) -> t.Iterator[Model]:
+            if not self._consistent_with_model(cur_model):
+                return
+            if index >= len(names):
+                yield cur_model
+                return
+            for value in True, False:
+                model = cur_model.copy()
+                model[names[index]] = value
+                yield from models(index + 1, model)
 
-        for var in names:
-            for leaf, path in leaves(model_tree):
-                model = dict(zip(names, path))
-                model[var] = True
-                if self._consistent_with_model(model):
-                    leaf[True] = {}
-                model[var] = False
-                if self._consistent_with_model(model):
-                    leaf[False] = {}
-                assert leaf  # at least one of them has to be satisfiable
-
-        for leaf, path in leaves(model_tree):
-            yield dict(zip(names, path))
+        return models(0, {})
 
     def is_CNF(self, strict: bool = False) -> bool:
         """Return whether the sentence is in the Conjunctive Normal Form.
@@ -1317,13 +1393,15 @@ class Var(NNF):
     Var(10)
     >>> Var(('a', 'b'), False)
     ~Var(('a', 'b'))
-
-    :ivar name: The name of the variable. Can be any hashable object.
-    :ivar true: Whether the variable is true. If ``False``, the variable is
-                negated.
     """
 
-    __slots__ = ('name', 'true')
+    __slots__ = {
+        "name": "The name of the variable. Can be any hashable object.",
+        "true": (
+            "Whether the variable is true. If ``False``, the variable is "
+            "negated."
+        ),
+    }
 
     if t.TYPE_CHECKING:
         def __init__(self, name: Name, true: bool = True) -> None:
@@ -1430,6 +1508,26 @@ class Internal(NNF, t.Generic[T_NNF_co]):
         else:
             return "{}()".format(self.__class__.__name__)
 
+    def _repr_pretty_(self, printer: t.Any, cycle: bool) -> None:
+        """Pretty-printing for IPython and Hypothesis.
+
+        https://ipython.rtfd.io/en/stable/api/generated/IPython.lib.pretty.html
+        """
+        if not self.children:
+            printer.text(repr(self))
+            return
+        name = self.__class__.__name__
+        if cycle:
+            # Impossible except by malicious use of object.__setattr__
+            printer.text("{}(...)".format(name))
+            return
+        with printer.group(len(name) + 2, name + "({", "})"):
+            for ind, child in enumerate(self):
+                if ind:
+                    printer.text(",")
+                    printer.breakable()
+                printer.pretty(child)
+
     def leaf(self) -> bool:
         if self.children:
             return False
@@ -1500,6 +1598,10 @@ class And(Internal[T_NNF_co]):
             return 'true'
         return super().__repr__()
 
+    def _repr_pretty_(self, printer: t.Any, cycle: bool) -> None:
+        # An explicit definition is necessary or it will be ignored
+        return super()._repr_pretty_(printer, cycle)
+
     if t.TYPE_CHECKING:
         def negate(self) -> 'Or[NNF]':
             ...
@@ -1567,6 +1669,9 @@ class Or(Internal[T_NNF_co]):
             return 'false'
         return super().__repr__()
 
+    def _repr_pretty_(self, printer: t.Any, cycle: bool) -> None:
+        return super()._repr_pretty_(printer, cycle)
+
     if t.TYPE_CHECKING:
         def negate(self) -> 'And[NNF]':
             ...
@@ -1616,43 +1721,125 @@ true = And()  # type: And[Bottom]
 false = Or()  # type: Or[Bottom]
 
 
-class Builder:
-    """Automatically deduplicates NNF nodes as you make them, to save memory.
+class _Setting(t.Generic[T]):
+    """Use the descriptor protocol for a smart settings system."""
+    def __init__(
+        self, default: T, choices: t.Optional[t.Set[T]] = None
+    ) -> None:
+        self.choices = choices
+        self.default = default
+        self.local = threading.local()
+        self.name = None  # type: t.Optional[str]
 
-    Usage:
+    def __set_name__(self, owner: object, name: str) -> None:
+        self.name = name
 
-    >>> builder = Builder()
-    >>> var = builder.Var('A')
-    >>> var2 = builder.Var('A')
-    >>> var is var2
-    True
+    def __get__(self, instance: object, owner: object = None) -> T:
+        return getattr(self.local, "value", self.default)  # type: ignore
 
-    As long as the Builder object exists, the nodes it made will be kept in
-    memory. Make sure not to keep it around longer than you need.
+    def __set__(self, instance: object, value: T) -> None:
+        if self.choices is not None and value not in self.choices:
+            if self.name is None:
+                raise ValueError("Invalid value {!r}".format(value))
+            raise ValueError(
+                "Invalid value {!r} for setting {!r}".format(value, self.name)
+            )
+        self.local.value = value
 
-    It's often a better idea to avoid creating nodes multiple times in the
-    first place. That will save processing time as well as memory.
 
-    If you use a Builder, avoid using operators. Even negating variables
-    should be done with ``builder.Var(name, False)`` or they won't be
-    deduplicated.
+_Func = t.TypeVar("_Func", bound=t.Callable[..., object])
+
+
+class _ConfigContext:
+    """An object to apply configuration as a context manager or decorator."""
+    def __init__(self, settings: t.Dict[str, t.Any]) -> None:
+        self.settings = settings
+        self.old_settings = threading.local()
+
+    def __enter__(self) -> None:
+        self.old_settings.__dict__.setdefault("stack", []).append(
+            {name: getattr(config, name) for name in self.settings}
+        )
+        for name, value in self.settings.items():
+            setattr(config, name, value)
+
+    def __exit__(self, *exc: object) -> None:
+        for name, value in self.old_settings.stack.pop().items():
+            setattr(config, name, value)
+
+    def __call__(self, func: _Func) -> _Func:
+        @functools.wraps(func)
+        def newfunc(*args: t.Any, **kwargs: t.Any) -> t.Any:
+            with self:
+                return func(*args, **kwargs)
+
+        return newfunc  # type: ignore
+
+
+class _Config:
+    """Configuration management.
+
+    We need to instantiate this class to make the __set__ part of the
+    descriptor protocol work and to take advantage of __slots__ so people can't
+    misspell a setting without noticing.
     """
-    def __init__(self, seed: t.Iterable[NNF] = ()) -> None:
-        """:param seed: Nodes to store for reuse in advance."""
-        self.stored = {true: true, false: false}  # type: t.Dict[NNF, NNF]
-        for node in seed:
-            self.stored[node] = node
-        self.true = true
-        self.false = false
 
-    def Var(self, name: Name, true: bool = True) -> 'nnf.Var':
-        ret = Var(name, true)
-        return self.stored.setdefault(ret, ret)  # type: ignore
+    # Remember to update the doc comment below whenever adding a setting
+    sat_backend = _Setting("auto", {"auto", "native", "kissat", "pysat"})
+    models_backend = _Setting("auto", {"auto", "native", "pysat"})
+    pysat_solver = _Setting("minisat22")
 
-    def And(self, children: t.Iterable[T_NNF] = ()) -> 'nnf.And[T_NNF]':
-        ret = And(children)
-        return self.stored.setdefault(ret, ret)  # type: ignore
+    __slots__ = ()
 
-    def Or(self, children: t.Iterable[T_NNF] = ()) -> 'nnf.Or[T_NNF]':
-        ret = Or(children)
-        return self.stored.setdefault(ret, ret)  # type: ignore
+    def __call__(self, **settings: str) -> _ConfigContext:
+        return _ConfigContext(settings)
+
+
+#: Configuration management.
+#:
+#: There are three ways to change a setting. Scoped::
+#:
+#:   >>> with config(sat_backend="native"):
+#:   ...     do_something()
+#:
+#: Indefinite::
+#:
+#:   >>> config.sat_backend = "native"
+#:   >>> do_something()
+#:
+#: And as a decorator::
+#:
+#:   >>> @config(sat_backend="native")
+#:   ... def some_func():
+#:   ...     do_something()
+#:
+#: Configuration is isolated per thread.
+#:
+#: The following settings are available:
+#:
+#: - ``sat_backend``: The backend used for SAT solving. Implicitly used by
+#:   many methods.
+#:
+#:   - ``native``: A slow Python implementation. Always available.
+#:   - ``pysat``: An implementation using the PySAT library. Generally faster
+#:     than ``native``. Only available if the library is installed.
+#:   - ``kissat``: An implementation using `kissat` as an external program.
+#:     Fast, but high overhead, so relatively slow on small problems.
+#:   - ``auto`` (default): Use ``pysat`` if available, otherwise ``native``.
+#:
+#: - ``models_backend``: The backend used for model enumeration.
+#:
+#:   - ``native``: A slow Python implementation. Always available.
+#:   - ``pysat``: An implementation using PySAT. Often much faster than
+#:     ``native``, but much slower on small problems with many models.
+#:   - ``auto`` (default): Use ``native``. Behavior may change in the future.
+#:
+#: - ``pysat_solver``: The solver to use for `PySAT
+#:   <https://pysathq.github.io/>`_. Can be any of the names in
+#:   `pysat.solvers.SolverNames
+#:   <https://pysathq.github.io/docs/html/api/solvers.html
+#:   #pysat.solvers.SolverNames>`_. Default: ``minisat22``.
+config = _Config()
+
+
+from nnf import amc, dsharp, kissat, operators, pysat, tseitin  # noqa: E402
