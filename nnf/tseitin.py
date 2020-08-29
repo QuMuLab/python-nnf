@@ -26,8 +26,13 @@ def to_CNF(theory: NNF) -> And[Or[Var]]:
 
         assert isinstance(node, Internal)
 
-        aux = Var.aux()
         children = {process_node(c) for c in node.children}
+
+        if len(children) == 1:
+            [child] = children
+            return child
+
+        aux = Var.aux()
 
         if any(~var in children for var in children):
             if isinstance(node, And):
@@ -50,8 +55,36 @@ def to_CNF(theory: NNF) -> And[Or[Var]]:
 
         return aux
 
-    root = process_node(theory)
-    clauses.append(Or({root}))
+    @memoize
+    def process_required(node: NNF) -> None:
+        """For nodes that have to be satisfied.
+
+        This lets us perform some optimizations.
+        """
+        if isinstance(node, Var):
+            clauses.append(Or({node}))
+            return
+
+        assert isinstance(node, Internal)
+
+        if len(node.children) == 1:
+            [child] = node.children
+            process_required(child)
+
+        elif isinstance(node, Or):
+            children = {process_node(c) for c in node.children}
+            if any(~var in children for var in children):
+                return
+            clauses.append(Or(children))
+
+        elif isinstance(node, And):
+            for child in node.children:
+                process_required(child)
+
+        else:
+            raise TypeError(node)
+
+    process_required(theory)
     ret = And(clauses)
     NNF._is_CNF_loose.set(ret, True)
     NNF._is_CNF_strict.set(ret, True)
