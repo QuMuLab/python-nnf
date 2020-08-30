@@ -858,6 +858,7 @@ def test_tseitin(sentence: nnf.NNF):
     T = tseitin.to_CNF(sentence)
     assert T.is_CNF()
     assert T.is_CNF(strict=True)
+    assert tseitin.to_CNF(T) == T
     assert T.forget_aux().equivalent(sentence)
 
     models = list(complete_models(T.models(), sentence.vars() | T.vars()))
@@ -866,6 +867,20 @@ def test_tseitin(sentence: nnf.NNF):
         assert sentence.satisfied_by(mt)
 
     assert len(models) == sentence.model_count()
+
+
+@given(CNF())
+def test_tseitin_preserves_CNF(sentence: And[Or[Var]]):
+    assert sentence.to_CNF() == sentence
+
+
+def test_tseitin_required_detection():
+    assert a.to_CNF() == And({Or({a})})
+    assert And().to_CNF() == And()
+    assert Or().to_CNF() == And({Or()})
+    assert (a | b).to_CNF() == And({a | b})
+    assert And({a | b, b | c}).to_CNF() == And({a | b, b | c})
+    assert And({And({Or({And({~a})})})}).to_CNF() == And({Or({~a})})
 
 
 @given(models())
