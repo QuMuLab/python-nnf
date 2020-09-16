@@ -53,11 +53,21 @@ Complete documentation can be found at [readthedocs](https://python-nnf.readthed
 
 # Installing
 
+At least Python 3.4 is required.
+
+## Recommended
+
+Install with support for a variety of SAT solvers.
+
+```sh
+pip install nnf[pysat]
+```
+
+## Vanilla
+
 ```sh
 pip install nnf
 ```
-
-At least Python 3.4 is required.
 
 # Serialization
 
