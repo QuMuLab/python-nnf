@@ -78,7 +78,7 @@ interface.
 
 # DSHARP interoperability
 
-[DSHARP](https://bitbucket.org/haz/dsharp) is a program that compiles CNF
+[DSHARP](https://github.com/QuMuLab/dsharp) is a program that compiles CNF
 sentences to (s)d-DNNF sentences. The `nnf.dsharp` module contains tools for
 parsing its output format and for invoking the compiler.
 
